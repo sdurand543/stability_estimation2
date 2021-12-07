@@ -306,6 +306,15 @@ class A1(minitaur.Minitaur):
   def GetHipPositionsInBaseFrame(self):
     return _DEFAULT_HIP_POSITIONS
 
+  def GetFootForce(self):
+    all_contacts = self._pybullet_client.getContactPoints(bodyA=self.quadruped)
+    forces = dict()
+    for link_id in self._foot_link_ids:
+      forces[str(link_id)] = 0
+    for contact in all_contacts:
+      forces[str(contact[3])] = contact[9]
+    return forces
+
   def GetFootContacts(self):
     all_contacts = self._pybullet_client.getContactPoints(bodyA=self.quadruped)
 

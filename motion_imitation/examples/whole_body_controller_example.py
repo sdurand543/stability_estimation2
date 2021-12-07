@@ -32,6 +32,10 @@ from motion_imitation.robots import a1
 from motion_imitation.robots import robot_config
 from motion_imitation.robots.gamepad import gamepad_reader
 
+import datetime as datetime
+import matplotlib.pyplot as plt
+import pandas as pd
+
 flags.DEFINE_string("logdir", None, "where to log trajectories.")
 flags.DEFINE_bool("use_gamepad", False,
                   "whether to use gamepad to provide control input.")
@@ -201,6 +205,7 @@ def main(argv):
   start_time = robot.GetTimeSinceReset()
   current_time = start_time
   com_vels, imu_rates, actions = [], [], []
+  cumulative_foot_forces = []
   while current_time - start_time < FLAGS.max_time_secs:
     #time.sleep(0.0008) #on some fast computer, works better with sleep on real A1?
     start_time_robot = current_time
@@ -225,7 +230,18 @@ def main(argv):
       actual_duration = time.time() - start_time_wall
       if actual_duration < expected_duration:
         time.sleep(expected_duration - actual_duration)
-    print("actual_duration=", actual_duration)
+    # print("actual_duration=", actual_duration)
+    time_dict = {'current_time': current_time}
+    foot_forces = robot.GetFootForce()
+    df_dict = dict(time_dict)
+    df_dict.update(foot_forces)
+    cumulative_foot_forces.append(df_dict)
+    print("Foot Forces:", foot_forces)
+  df = pd.DataFrame(cumulative_foot_forces)
+  df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
+  plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
+  # plt.show()
+
   if FLAGS.use_gamepad:
     gamepad.stop()
 
