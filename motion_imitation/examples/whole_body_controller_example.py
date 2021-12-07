@@ -13,10 +13,11 @@ import numpy as np
 import os
 import scipy.interpolate
 import time
+import math
 
 import pybullet_data
 from pybullet_utils import bullet_client
-import pybullet  # pytype:disable=import-error
+import pybullet# pytype:disable=import-error
 
 from mpc_controller import com_velocity_estimator
 from mpc_controller import gait_generator as gait_generator_lib
@@ -32,24 +33,20 @@ from motion_imitation.robots import a1
 from motion_imitation.robots import robot_config
 from motion_imitation.robots.gamepad import gamepad_reader
 
-import datetime as datetime
-import matplotlib.pyplot as plt
-import pandas as pd
-
 flags.DEFINE_string("logdir", None, "where to log trajectories.")
 flags.DEFINE_bool("use_gamepad", False,
                   "whether to use gamepad to provide control input.")
 flags.DEFINE_bool("use_real_robot", False,
                   "whether to use real robot or simulation")
-flags.DEFINE_bool("show_gui", False, "whether to show GUI.")
-flags.DEFINE_float("max_time_secs", 1., "maximum time to run the robot.")
+flags.DEFINE_bool("show_gui", True, "whether to show GUI.")
+flags.DEFINE_float("max_time_secs", 15., "maximum time to run the robot.")
 FLAGS = flags.FLAGS
 
 _NUM_SIMULATION_ITERATION_STEPS = 300
 _MAX_TIME_SECONDS = 30.
 
 _STANCE_DURATION_SECONDS = [
-    0.3
+    0.4
 ] * 4  # For faster trotting (v > 1.5 ms reduce this to 0.13s).
 
 # Standing
@@ -88,12 +85,12 @@ _INIT_LEG_STATE = (
 
 def _generate_example_linear_angular_speed(t):
   """Creates an example speed profile based on time for demo purpose."""
-  vx = 0
-  vy = 0
-  wz = 0
+  vx = 0.2
+  vy = 0.2
+  wz = 0.8
 
-  time_points = (0, 5, 10, 15, 20, 25, 30)
-  speed_points = ((0, 0, 0, 0), (0, 0, 0, wz), (vx, 0, 0, 0), (0, 0, 0, -wz),
+  time_points = (0, 30, 30, 30, 30, 30, 30)
+  speed_points = ((0.03+0.15, 0.01, 0, 0), (0, 0, 0, wz), (vx, 0, 0, 0), (0, 0, 0, -wz),
                   (0, -vy, 0, 0), (0, 0, 0, 0), (0, 0, 0, wz))
 
   speed = scipy.interpolate.interp1d(time_points,
@@ -116,6 +113,7 @@ def _setup_controller(robot):
       duty_factor=_DUTY_FACTOR,
       initial_leg_phase=_INIT_PHASE_FULL_CYCLE,
       initial_leg_state=_INIT_LEG_STATE)
+  time.sleep(0.2)
   window_size = 20 if not FLAGS.use_real_robot else 1
   state_estimator = com_velocity_estimator.COMVelocityEstimator(
       robot, window_size=window_size)
@@ -169,8 +167,18 @@ def main(argv):
   p.setGravity(0, 0, -9.8)
   p.setPhysicsEngineParameter(enableConeFriction=0)
   p.setAdditionalSearchPath(pybullet_data.getDataPath())
-  p.loadURDF("plane.urdf")
+  p.loadURDF("plane100.urdf")
 
+  #the visual shape and collision shape can be re-used by all createMultiBody instances (instancing)
+  #p.loadURDF("YcbFoamBrick/model.urdf")
+  boxHalfLength = 1
+  boxHalfWidth = 1
+  boxHalfHeight = 0.1
+  sh_colBox = p.createCollisionShape(p.GEOM_BOX,halfExtents=[boxHalfLength,boxHalfWidth,boxHalfHeight])
+  #mass = 1
+  block2=p.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
+                          basePosition = [1.3,0.6,-0.05],baseOrientation=[0.0,0.0,0.0,1])
+  #p.changeDynamics(block2, -1, linearDamping=0,angularDamping=0, rollingFriction = 0, spinningFriction = 0, lateralFriction = 0.4)
   # Construct robot class:
   if FLAGS.use_real_robot:
     from motion_imitation.robots import a1_robot
@@ -184,7 +192,7 @@ def main(argv):
     robot = a1.A1(p,
                   motor_control_mode=robot_config.MotorControlMode.HYBRID,
                   enable_action_interpolation=False,
-                  reset_time=2,
+                  reset_time=3,
                   time_step=0.002,
                   action_repeat=1)
 
@@ -205,14 +213,18 @@ def main(argv):
   start_time = robot.GetTimeSinceReset()
   current_time = start_time
   com_vels, imu_rates, actions = [], [], []
-  cumulative_foot_forces = []
   while current_time - start_time < FLAGS.max_time_secs:
     #time.sleep(0.0008) #on some fast computer, works better with sleep on real A1?
     start_time_robot = current_time
     start_time_wall = time.time()
     # Updates the controller behavior parameters.
-    lin_speed, ang_speed, e_stop = command_function(current_time)
-    # print(lin_speed)
+    lin_speed, ang_speed, e_stop = command_function(current_time) #command_function(current_time)
+    if current_time > 1.5 and current_time < 8:
+      lin_speed = np.array([0.03,-0.2,0])
+    elif current_time > 0.5 and current_time < 8:
+      lin_speed = np.array([-0.2,0.01,0])
+    elif current_time > 8 and current_time < 10:
+      lin_speed = np.array([0.03, 0.01, 0])
     if e_stop:
       logging.info("E-stop kicked, exiting...")
       break
@@ -221,7 +233,12 @@ def main(argv):
     hybrid_action, _ = controller.get_action()
     com_vels.append(np.array(robot.GetBaseVelocity()).copy())
     imu_rates.append(np.array(robot.GetBaseRollPitchYawRate()).copy())
+
     actions.append(hybrid_action)
+    #print("Motor Controls: ")
+    #print(hybrid_action)
+    start = False
+    print(hybrid_action)
     robot.Step(hybrid_action)
     current_time = robot.GetTimeSinceReset()
 
@@ -230,18 +247,7 @@ def main(argv):
       actual_duration = time.time() - start_time_wall
       if actual_duration < expected_duration:
         time.sleep(expected_duration - actual_duration)
-    # print("actual_duration=", actual_duration)
-    time_dict = {'current_time': current_time}
-    foot_forces = robot.GetFootForce()
-    df_dict = dict(time_dict)
-    df_dict.update(foot_forces)
-    cumulative_foot_forces.append(df_dict)
-    print("Foot Forces:", foot_forces)
-  df = pd.DataFrame(cumulative_foot_forces)
-  df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
-  plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
-  # plt.show()
-
+    #print("actual_duration=", actual_duration)
   if FLAGS.use_gamepad:
     gamepad.stop()
 
