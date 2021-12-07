@@ -17,15 +17,98 @@ import math
 import numpy as np
 from typing import Any, Mapping, Sequence, Tuple
 
-from stability_estimation_controller import gait_generator as gait_generator_lib
-from stability_estimation_controller import leg_controller
+from mpc_controller import leg_controller
 
-# The position correction coefficients in Raibert's formula.
-_KP = np.array([0.01, 0.01, 0.01]) * 3
-# At the end of swing, we leave a small clearance to prevent unexpected foot
-# collision.
-_FOOT_CLEARANCE_M = 0.01
+class StabilityEstimationLegController(leg_controller.LegController):
+  """Controls the swing leg position using Raibert's formula.
 
+  For details, please refer to chapter 2 in "Legged robbots that balance" by
+  Marc Raibert. The key idea is to stablize the swing foot's location based on
+  the CoM moving speed.
+
+  """
+  def __init__(
+      self,
+      robot: Any,
+      state_estimator: Any,
+      leg_states : Any,
+      desired_impact_force: float,
+      desired_test_duration: float,
+      desired_twisting_speed: float,
+      desired_lift_height: float
+  ):
+    """Initializes the class.
+
+    Args:
+      robot: A robot instance.
+      gait_generator: Generates the stance/swing pattern.
+      state_estimator: Estiamtes the CoM speeds.
+      desired_speed: Behavior parameters. X-Y speed.
+      desired_twisting_speed: Behavior control parameters.
+      desired_height: Desired standing height.
+      foot_clearance: The foot clearance on the ground at the end of the swing
+        cycle.
+    """
+    self.robot = robot
+    self.state_estimator = state_estimator
+    self.leg_states = leg_states
+    self.desired_impact_force = destire_impact_force
+    self.desired_test_duration = desired_test_durationn
+    self.desired_twisting_speed = desitred_twisting_speed
+    self.desired_lift_height = desired_lift_height
+    self._joint_angles = None
+    self._foot_local_position = None
+    self.reset(0)
+
+  def reset(self, current_time: float) -> None:
+    """Called during the start of a swing cycle.
+
+    Args:
+      current_time: The wall time in seconds.
+    """
+    del current_time
+    self._foot_local_position = (
+        self._robot.GetFootPositionsInBaseFrame())
+    self._joint_angles = {}
+
+  def update(self, current_time: float) -> None:
+    """Called at each control step.
+
+    Args:
+      current_time: The wall time in seconds.
+    """
+    del current_time
+
+  def get_action(self) -> Mapping[Any, Any]:
+    com_velocity = self._state_estimator.com_velocity_body_frame
+    com_velocity = np.array((com_velocity[0], com_velocity[1], 0))
+
+    _, _, yaw_dot = self._robot.GetBaseRollPitchYawRate()
+    hip_positions = self._robot.GetHipPositionsInBaseFrame()
+
+    for leg_id, leg_state in enumerate(self.leg_states):
+      if (leg_state == "STATIC_STANCE"):
+        static_stance(leg_id)
+      if (leg_stance == "ESTIMATING"):
+        estimating_stance(leg_id)
+      for joint_id, joint_angle in zip(joint_ids, joint_angles):
+        self._joint_angles[joint_id] = (joint_angle, leg_id)
+
+    action = {}
+    kps = self._robot.GetMotorPositionGains()
+    kds = self._robot.GetMotorVelocityGains()
+    for joint_id, joint_angle_leg_id in self._joint_angles.items():
+      leg_id = joint_angle_leg_id[1]
+      action[joint_id] = (joint_angle_leg_id[0], kps[joint_id], 0,
+                          kds[joint_id], 0)
+
+    return action
+
+def static_stance(leg_id):
+  pass
+
+def estimating(leg_id):
+  pass
 
 def _gen_parabola(phase: float, start: float, mid: float, end: float) -> float:
   """Gets a point on a parabola y = a x^2 + b x + c.
@@ -88,127 +171,3 @@ def _gen_swing_foot_trajectory(input_phase: float, start_pos: Sequence[float],
   # PyType detects the wrong return type here.
   return (x, y, z)  # pytype: disable=bad-return-type
 
-
-class StabilityEstimationLegController(leg_controller.LegController):
-  """Controls the swing leg position using Raibert's formula.
-
-  For details, please refer to chapter 2 in "Legged robbots that balance" by
-  Marc Raibert. The key idea is to stablize the swing foot's location based on
-  the CoM moving speed.
-
-  """
-  def __init__(
-      self,
-      robot: Any,
-      gait_generator: Any,
-      state_estimator: Any,
-      desired_speed: Tuple[float, float],
-      desired_twisting_speed: float,
-      desired_height: float,
-      foot_clearance: float,
-  ):
-    """Initializes the class.
-
-    Args:
-      robot: A robot instance.
-      gait_generator: Generates the stance/swing pattern.
-      state_estimator: Estiamtes the CoM speeds.
-      desired_speed: Behavior parameters. X-Y speed.
-      desired_twisting_speed: Behavior control parameters.
-      desired_height: Desired standing height.
-      foot_clearance: The foot clearance on the ground at the end of the swing
-        cycle.
-    """
-    self._robot = robot
-    self._state_estimator = state_estimator
-    self._gait_generator = gait_generator
-    self._last_leg_state = gait_generator.desired_leg_state
-    self.desired_speed = np.array((desired_speed[0], desired_speed[1], 0))
-    self.desired_twisting_speed = desired_twisting_speed
-    self._desired_height = np.array((0, 0, desired_height - foot_clearance))
-
-    self._joint_angles = None
-    self._phase_switch_foot_local_position = None
-    self.reset(0)
-
-  def reset(self, current_time: float) -> None:
-    """Called during the start of a swing cycle.
-
-    Args:
-      current_time: The wall time in seconds.
-    """
-    del current_time
-    self._last_leg_state = self._gait_generator.desired_leg_state
-    self._phase_switch_foot_local_position = (
-        self._robot.GetFootPositionsInBaseFrame())
-    self._joint_angles = {}
-
-  def update(self, current_time: float) -> None:
-    """Called at each control step.
-
-    Args:
-      current_time: The wall time in seconds.
-    """
-    del current_time
-    new_leg_state = self._gait_generator.desired_leg_state
-
-    # Detects phase switch for each leg so we can remember the feet position at
-    # the beginning of the swing phase.
-    for leg_id, state in enumerate(new_leg_state):
-      if (state == gait_generator_lib.LegState.SWING
-          and state != self._last_leg_state[leg_id]):
-        self._phase_switch_foot_local_position[leg_id] = (
-            self._robot.GetFootPositionsInBaseFrame()[leg_id])
-
-    self._last_leg_state = copy.deepcopy(new_leg_state)
-
-  def get_action(self) -> Mapping[Any, Any]:
-    com_velocity = self._state_estimator.com_velocity_body_frame
-    com_velocity = np.array((com_velocity[0], com_velocity[1], 0))
-
-    _, _, yaw_dot = self._robot.GetBaseRollPitchYawRate()
-    hip_positions = self._robot.GetHipPositionsInBaseFrame()
-
-    for leg_id, leg_state in enumerate(self._gait_generator.leg_state):
-      if leg_state in (gait_generator_lib.LegState.STANCE,
-                       gait_generator_lib.LegState.EARLY_CONTACT):
-        continue
-
-      # For now we did not consider the body pitch/roll and all calculation is
-      # in the body frame. TODO(b/143378213): Calculate the foot_target_position
-      # in world frame and then project back to calculate the joint angles.
-      hip_offset = hip_positions[leg_id]
-      twisting_vector = np.array((-hip_offset[1], hip_offset[0], 0))
-      hip_horizontal_velocity = com_velocity + yaw_dot * twisting_vector
-      # print("Leg: {}, ComVel: {}, Yaw_dot: {}".format(leg_id, com_velocity,
-      #                                                 yaw_dot))
-      # print(hip_horizontal_velocity)
-      target_hip_horizontal_velocity = (
-          self.desired_speed + self.desired_twisting_speed * twisting_vector)
-      foot_target_position = (
-          hip_horizontal_velocity *
-          self._gait_generator.stance_duration[leg_id] / 2 - _KP *
-          (target_hip_horizontal_velocity - hip_horizontal_velocity)
-      ) - self._desired_height + np.array((hip_offset[0], hip_offset[1], 0))
-      foot_position = _gen_swing_foot_trajectory(
-          self._gait_generator.normalized_phase[leg_id],
-          self._phase_switch_foot_local_position[leg_id], foot_target_position)
-      joint_ids, joint_angles = (
-          self._robot.ComputeMotorAnglesFromFootLocalPosition(
-              leg_id, foot_position))
-      # Update the stored joint angles as needed.
-      for joint_id, joint_angle in zip(joint_ids, joint_angles):
-        self._joint_angles[joint_id] = (joint_angle, leg_id)
-
-    action = {}
-    kps = self._robot.GetMotorPositionGains()
-    kds = self._robot.GetMotorVelocityGains()
-    for joint_id, joint_angle_leg_id in self._joint_angles.items():
-      leg_id = joint_angle_leg_id[1]
-      if self._gait_generator.desired_leg_state[
-          leg_id] == gait_generator_lib.LegState.SWING:
-        # This is a hybrid action for PD control.
-        action[joint_id] = (joint_angle_leg_id[0], kps[joint_id], 0,
-                            kds[joint_id], 0)
-
-    return action
