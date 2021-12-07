@@ -52,9 +52,8 @@ class StabilityEstimationLegController(leg_controller.LegController):
     self.robot = robot
     self.state_estimator = state_estimator
     self.leg_states = leg_states
-    self.desired_impact_force = destire_impact_force
-    self.desired_test_duration = desired_test_durationn
-    self.desired_twisting_speed = desitred_twisting_speed
+    self.desired_impact_force = desire_impact_force
+    self.desired_test_duration = desired_test_duration # amount of time that the estimator should estimate for
     self.desired_lift_height = desired_lift_height
     self._joint_angles = None
     self._foot_local_position = None
@@ -101,7 +100,7 @@ class StabilityEstimationLegController(leg_controller.LegController):
       leg_id = joint_angle_leg_id[1]
       action[joint_id] = (joint_angle_leg_id[0], kps[joint_id], 0,
                           kds[joint_id], 0)
-
+ 
     return action
 
 def static_stance(leg_id):

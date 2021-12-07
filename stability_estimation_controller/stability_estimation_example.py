@@ -21,11 +21,9 @@ import time
 import pybullet
 import random
 
-from stability_estimation_controller import com_velocity_estimator
-from stability_estimation_controller import locomotion_controller
-from stability_estimation_controller import gait_generator as gait_generator_lib
+from mpc_controller import com_velocity_estimator
+from mpc_controller import gait_genrator as gait_generator_lib
 from stability_estimation_controller import stability_estimation_leg_controller
-from stability_estimation_controller import stable_stance_leg_controller
 
 #uncomment the robot of choice
 #from stability_estimation_controller import laikago_sim as robot_sim
@@ -68,37 +66,17 @@ def _setup_controller(robot):
   """Demonstrates how to create a locomotion controller."""
   desired_speed = (0, 0)
   desired_twisting_speed = 0
-  
-  sw_controller = stability_estimation_leg_controller.StabilityEstimationLegController(
+  controller = stability_estimation_leg_controller.StabilityEstimationLegController(
       robot,
       state_estimator,
       desired_speed=desired_speed,
       desired_twisting_speed=desired_twisting_speed,
       desired_height=robot_sim.MPC_BODY_HEIGHT,
       foot_clearance=0.01)
-
-  st_controller = torque_stance_leg_controller.StaticStanceLegController(
-      robot,
-      state_estimator,
-      desired_speed=desired_speed,
-      desired_twisting_speed=desired_twisting_speed,
-      desired_body_height=robot_sim.MPC_BODY_HEIGHT,
-      body_mass=robot_sim.MPC_BODY_MASS,
-      body_inertia=robot_sim.MPC_BODY_INERTIA)
-
-  controller = locomotion_controller.LocomotionController(
-    robot=robot,
-    state_estimator=state_estimator,
-    stability_estimation_leg_controller=sw_controller,
-    static_stance_leg_controller=st_controller,
-    clock=robot.GetTimeSinceReset)
   return controller
 
 def _update_controller_params(controller, lin_speed, ang_speed):
-  controller.swing_leg_controller.desired_speed = lin_speed
-  controller.swing_leg_controller.desired_twisting_speed = ang_speed
-  controller.stance_leg_controller.desired_speed = lin_speed
-  controller.stance_leg_controller.desired_twisting_speed = ang_speed
+  pass
 
 def _run_example(max_time=_MAX_TIME_SECONDS):
   """Runs the locomotion controller example."""
