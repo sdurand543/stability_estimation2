@@ -84,30 +84,42 @@ class StabilityEstimationLegController(leg_controller.LegController):
 
     _, _, yaw_dot = self._robot.GetBaseRollPitchYawRate()
     hip_positions = self._robot.GetHipPositionsInBaseFrame()
+    
+    # Update the stored joint angles as needed.
+    for joint_id, joint_angle in zip(joint_ids, joint_angles):
+      self._joint_angles[joint_id] = (joint_angle, leg_id)
 
     for leg_id, leg_state in enumerate(self.leg_states):
-      if (leg_state == "STATIC_STANCE"):
-        static_stance(leg_id)
-      if (leg_stance == "ESTIMATING"):
-        estimating_stance(leg_id)
+      
+      if (leg_state == gait_generator_lib.LegState.STATIC_STANCE):
+        joint_ids, joint_angles = static_stance(leg_id)
+        
+      if (leg_stance == gait_generator_lib.LegState.ESTIMATING):
+        joint_ids, joint_angles = estimating_stance(leg_id)
+        
       for joint_id, joint_angle in zip(joint_ids, joint_angles):
         self._joint_angles[joint_id] = (joint_angle, leg_id)
-
+        
     action = {}
+    # do something to apply these to the robot?????
     kps = self._robot.GetMotorPositionGains()
     kds = self._robot.GetMotorVelocityGains()
     for joint_id, joint_angle_leg_id in self._joint_angles.items():
       leg_id = joint_angle_leg_id[1]
       action[joint_id] = (joint_angle_leg_id[0], kps[joint_id], 0,
                           kds[joint_id], 0)
- 
+      
     return action
 
-def static_stance(leg_id):
-  pass
+  def static_stance(leg_id):
+    # return joint_ids, joint_angles for this leg
+    # you may want to use the functions near the bottom of the swing controller
+    pass
 
-def estimating(leg_id):
-  pass
+  def estimating(leg_id):
+    # return joint_ids, joint_angles for this leg
+    # you may want to use the functions near the bottom of the swing controller    
+    pass
 
 def _gen_parabola(phase: float, start: float, mid: float, end: float) -> float:
   """Gets a point on a parabola y = a x^2 + b x + c.

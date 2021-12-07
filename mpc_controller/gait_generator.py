@@ -17,6 +17,8 @@ class LegState(enum.Enum):
   EARLY_CONTACT = 2
   # A stance leg that loses contact.
   LOSE_CONTACT = 3
+  STATIC_STANCE = 4
+  STABILITY_ESTIMATION = 5
 
 
 class GaitGenerator(object):  # pytype: disable=ignored-metaclass
