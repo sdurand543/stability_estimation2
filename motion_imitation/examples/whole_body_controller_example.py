@@ -12,12 +12,18 @@ from datetime import datetime
 import numpy as np
 import os
 import scipy.interpolate
+from scipy import stats
 import time
 import math
 
 import pybullet_data
 from pybullet_utils import bullet_client
 import pybullet# pytype:disable=import-error
+
+import datetime as datetime
+import matplotlib.pyplot as plt
+import pandas as pd
+
 
 from mpc_controller import three_leg_balance_gait_generator as three_leg_balance_openloop_gait_generator
 from mpc_controller import three_leg_balance_swing_up as three_leg_balance_raibert_swing_leg_controller
@@ -335,6 +341,13 @@ def main(argv):
   action_initial = np.copy(action_final)
   desired_foot_position = [0.35,0.15,-0.3]
   action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  
+  force_profile_x = []
+  force_profile_y = []
+  data_collection = False
+  FOOT_SENSOR_NOISE_THRESHOLD = 0
+  DATA_COLLECTION_STOP_THRESHOLD = 15
+  force_profile_slope = 0
 
   for cur_step_ in range(num_steps_to_reset):
       action = action_initial * (
@@ -351,12 +364,29 @@ def main(argv):
       controller.update()
 
       trigger_foot_force = foot_forces['10']
-      if trigger_foot_force > 15:
-          action_initial = robot.GetMotorAngles()
-          action_initial = action
-          print('contact')
-          controller.update()
-          break
+      if trigger_foot_force > FOOT_SENSOR_NOISE_THRESHOLD and not data_collection:
+        data_collection = True
+        data_collection_start_time = time.time()
+        data_collection_end_time = time.time()
+
+      if data_collection and trigger_foot_force <= DATA_COLLECTION_STOP_THRESHOLD:
+        current_timestep = time.time() - data_collection_start_time
+        force_profile_x.append(current_timestep)
+        force_profile_y.append(trigger_foot_force)
+
+      if trigger_foot_force > DATA_COLLECTION_STOP_THRESHOLD:
+        data_collection = False
+        data_collection_end_time = timesteps
+        
+        slope, intercept, r, p, std_err = stats.linregress(force_profile_x, force_profile_y)
+        force_profile_slope = slope
+        
+        action_initial = robot.GetMotorAngles()
+        action_initial = action
+        
+        print('contact')
+        controller.update()
+        break
 
       time.sleep(robot.time_step)
 
@@ -477,7 +507,6 @@ def main(argv):
   current_time = start_time
   com_vels, imu_rates, actions = [], [], []
   while current_time - start_time < FLAGS.max_time_secs:
-    print('work')
     #time.sleep(0.0008) #on some fast computer, works better with sleep on real A1?
     start_time_robot = current_time
     start_time_wall = time.time()
@@ -506,6 +535,14 @@ def main(argv):
       if actual_duration < expected_duration:
         time.sleep(expected_duration - actual_duration)
     #print("actual_duration=", actual_duration)
+
+  print("Slope:", force_profile_slope)
+
+  df = pd.DataFrame(cumulative_foot_forces)
+  df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
+  plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
+  # plt.show()
+
   if FLAGS.use_gamepad:
     gamepad.stop()
 
