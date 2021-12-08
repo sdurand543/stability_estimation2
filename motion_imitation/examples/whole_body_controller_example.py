@@ -342,12 +342,16 @@ def main(argv):
   desired_foot_position = [0.35,0.15,-0.3]
   action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
   
-  force_profile_x = []
-  force_profile_y = []
+  timesteps_reg = []
+  position_profile_x = []
+  position_profile_y = []
+  position_profile_z = []
   data_collection = False
   FOOT_SENSOR_NOISE_THRESHOLD = 0
   DATA_COLLECTION_STOP_THRESHOLD = 15
-  force_profile_slope = 0
+  position_profile_slope_x = 0
+  position_profile_slope_y = 0
+  position_profile_slope_z = 0
 
   for cur_step_ in range(num_steps_to_reset):
       action = action_initial * (
@@ -371,15 +375,22 @@ def main(argv):
 
       if data_collection and trigger_foot_force <= DATA_COLLECTION_STOP_THRESHOLD:
         current_timestep = time.time() - data_collection_start_time
-        force_profile_x.append(current_timestep)
-        force_profile_y.append(trigger_foot_force)
+        timesteps_reg.append(current_timestep)
+        current_foot_position = robot.GetFootPositionsInBaseFrame()[1]
+        position_profile_x.append(current_foot_position[0])
+        position_profile_y.append(current_foot_position[1])
+        position_profile_z.append(current_foot_position[2])
 
       if trigger_foot_force > DATA_COLLECTION_STOP_THRESHOLD:
         data_collection = False
         data_collection_end_time = timesteps
         
-        slope, intercept, r, p, std_err = stats.linregress(force_profile_x, force_profile_y)
-        force_profile_slope = slope
+        slope, intercept, r, p, std_err = stats.linregress(timesteps_reg, position_profile_x)
+        position_profile_slope_x = slope
+        slope, intercept, r, p, std_err = stats.linregress(timesteps_reg, position_profile_y)
+        position_profile_slope_y = slope
+        slope, intercept, r, p, std_err = stats.linregress(timesteps_reg, position_profile_z)
+        position_profile_slope_z = slope
         
         action_initial = robot.GetMotorAngles()
         action_initial = action
@@ -536,7 +547,9 @@ def main(argv):
         time.sleep(expected_duration - actual_duration)
     #print("actual_duration=", actual_duration)
 
-  print("Slope:", force_profile_slope)
+  print("X Slope:", position_profile_slope_x)
+  print("Y Slope:", position_profile_slope_y)
+  print("Z Slope:", position_profile_slope_z)
 
   df = pd.DataFrame(cumulative_foot_forces)
   df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
