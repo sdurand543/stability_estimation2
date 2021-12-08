@@ -369,8 +369,8 @@ def main(argv):
 
     df = pd.DataFrame(cumulative_foot_forces)
     df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
-    # plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
-    plt.show()
+    plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
+    # plt.show()
 
     if FLAGS.use_gamepad:
         gamepad.stop()

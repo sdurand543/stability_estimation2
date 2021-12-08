@@ -18,6 +18,7 @@ import math
 
 import numpy as np
 from typing import Any, Mapping, Sequence, Tuple
+from collections import defaultdict
 
 try:
   from mpc_controller import gait_generator as gait_generator_lib
@@ -31,6 +32,8 @@ except:  #pylint: disable=W0702
 _KP = np.array([0.01, 0.01, 0.01]) * 4
 _KI = np.array([0.01, 0.01, 0.01]) * 4
 _KD = np.array([0.01, 0.01, 0.01]) * 4
+
+_FORCE_DIMENSION = 3
 
 class BalancedStanceLegController(leg_controller.LegController):
   """Controls the stance leg position using a PID controller and joint angle model prediction
@@ -68,11 +71,11 @@ class BalancedStanceLegController(leg_controller.LegController):
     self._gait_generator = gait_generator    
     self._last_leg_state = gait_generator.desired_leg_state
     self.desired_speed = np.array((desired_speed[0], desired_speed[1], 0))
-    self._desired_height = np.array((0, 0, desired_height))
+    self._desired_height = desired_height
 
     # PID_CONTROLLER
-    self.error_integral = {}
-    self.error_prev = {}
+    self.error_integral = defaultdict(float)
+    self.error_prev = defaultdict(float)
     self.k_p = _KP,
     self.k_i = _KI,
     self.k_d = _KD,
@@ -131,29 +134,30 @@ class BalancedStanceLegController(leg_controller.LegController):
     foot_positions = self._robot.GetFootPositionsInBaseFrame()
     
     # Get a List of STANCE Feet and Calculate Desired COM Positions
-    desired_com_position_2d = np.array([0, 0])
+    desired_com_position_2d = np.array([0., 0.], dtype=np.float64)
     stance_legs = {} # Mapping[leg_id, foot_position_bf]
     for leg_id, leg_state in enumerate(self._gait_generator.leg_state):
       if leg_state in (gait_generator_lib.LegState.STANCE,
-                       gait_generator_lib.LegState.EARLY_CONTACT): #include EARLY_CONTACT
+                       gait_generator_lib.LegState.LOSE_CONTACT): #include EARLY_CONTACT
         foot_position_bf = foot_positions[leg_id]
-        stance_legs[leg_id] = foot_position
-        com_desired += foot_position_bf[0:1]
+        stance_legs[leg_id] = foot_position_bf
+        desired_com_position_2d += foot_position_bf[0:1]
 
     # Center of STANCE Leg Polygon
-    desired_com_position_2d = desired_com_position_2d / stance_legs.size
+    desired_com_position_2d = desired_com_position_2d / len(stance_legs)
 
     # Delegate Desired Motion
-    desired_com_position = np.array((desired_com_position_2d[0],
+    desired_com_position = np.array([desired_com_position_2d[0],
                                      desired_com_position_2d[1],
-                                     self._desired_body_height),
+                                     self._desired_height],
                                     dtype=np.float64)
-    
-    for leg_id, foot_position in stance_legs:
+    print(stance_legs)
+    for leg_id, foot_position in stance_legs.items():
+      
       desired_foot_position_2d = foot_position[0:1] - desired_com_position_2d
       desired_foot_position = np.array(
-        (desired_foot_position_2d[0], desired_foot_position_2d[1],
-         -self._desired_height),
+        [desired_foot_position_2d[0], desired_foot_position_2d[1],
+         -self._desired_height],
         dtype=np.float64)
       
       # Update PID State
@@ -163,9 +167,9 @@ class BalancedStanceLegController(leg_controller.LegController):
       self.error_prev[leg_id] = error
       
       # Get Input Actuation
-      u = (self.k_p[leg_id] * error
-           + self.k_i[leg_id] * self.error_integral[leg_id] / current_time
-           + self.k_d[leg_id] * error_derivative)
+      u = (self.k_p[leg_id // 5] * error
+           + self.k_i[leg_id // 5] * self.error_integral[leg_id // 5]
+           + self.k_d[leg_id // 5] * error_derivative)
 
       # Get Total Position
       target_foot_position = foot_position + u
@@ -177,7 +181,7 @@ class BalancedStanceLegController(leg_controller.LegController):
       
       # Update the stored joint angles as needed.
       for joint_id, joint_angle in zip(joint_ids, joint_angles):
-        self._joint_angles[joint_id] = (joint_angle, leg_id)
+        self._joint_angles[joint_id] = (joint_angle, leg_id // 5)
 
     action = {}
     kps = self._robot.GetMotorPositionGains()
@@ -190,4 +194,5 @@ class BalancedStanceLegController(leg_controller.LegController):
         action[joint_id] = (joint_angle_leg_id[0], kps[joint_id], 0,
                             kds[joint_id], 0)
 
-    return action
+    print("action:", action)
+    return action, None

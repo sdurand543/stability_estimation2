@@ -35,6 +35,10 @@ from motion_imitation.robots import a1
 from motion_imitation.robots import robot_config
 from motion_imitation.robots.gamepad import gamepad_reader
 
+import pandas as pd
+import matplotlib.pyplot as plt
+import datetime as datetime
+
 flags.DEFINE_string("logdir", None, "where to log trajectories.")
 flags.DEFINE_bool("use_gamepad", False,
                   "whether to use gamepad to provide control input.")
@@ -283,6 +287,9 @@ def main(argv):
 
   num_steps_to_reset = 5000
   for cur_step_ in range(num_steps_to_reset):
+      balance_action = controller.get_action()
+      print("Balance Action:", balance_action)
+
       action = action_initial * (
                   num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
       robot.Step(action, robot_config.MotorControlMode.POSITION)
@@ -526,6 +533,11 @@ def main(argv):
              com_vels=com_vels,
              imu_rates=imu_rates)
     logging.info("logged to: {}".format(logdir))
+
+  df = pd.DataFrame(cumulative_foot_forces)
+  df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
+  plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
+  # plt.show()
 
 
 if __name__ == "__main__":
