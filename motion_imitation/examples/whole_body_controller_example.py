@@ -19,6 +19,8 @@ import pybullet_data
 from pybullet_utils import bullet_client
 import pybullet# pytype:disable=import-error
 
+from mpc_controller import three_leg_balance_gait_generator as three_leg_balance_openloop_gait_generator
+from mpc_controller import three_leg_balance_swing_up as three_leg_balance_raibert_swing_leg_controller
 from mpc_controller import com_velocity_estimator
 from mpc_controller import gait_generator as gait_generator_lib
 from mpc_controller import locomotion_controller
@@ -39,7 +41,7 @@ flags.DEFINE_bool("use_gamepad", False,
 flags.DEFINE_bool("use_real_robot", False,
                   "whether to use real robot or simulation")
 flags.DEFINE_bool("show_gui", True, "whether to show GUI.")
-flags.DEFINE_float("max_time_secs", 15., "maximum time to run the robot.")
+flags.DEFINE_float("max_time_secs", 30., "maximum time to run the robot.")
 FLAGS = flags.FLAGS
 
 _NUM_SIMULATION_ITERATION_STEPS = 300
@@ -72,25 +74,25 @@ _STANCE_DURATION_SECONDS = [
 # )
 
 # Trotting
-_DUTY_FACTOR = [0.6] * 4
-_INIT_PHASE_FULL_CYCLE = [0.9, 0, 0, 0.9]
+_DUTY_FACTOR = [1] * 4
+_INIT_PHASE_FULL_CYCLE = [0, 0, 0, 0]
 
 _INIT_LEG_STATE = (
     gait_generator_lib.LegState.SWING,
     gait_generator_lib.LegState.STANCE,
     gait_generator_lib.LegState.STANCE,
-    gait_generator_lib.LegState.SWING,
+    gait_generator_lib.LegState.STANCE,
 )
 
 
 def _generate_example_linear_angular_speed(t):
   """Creates an example speed profile based on time for demo purpose."""
-  vx = 0.2
-  vy = 0.2
-  wz = 0.8
+  vx = 0
+  vy = 0
+  wz = 0
 
   time_points = (0, 30, 30, 30, 30, 30, 30)
-  speed_points = ((0.03+0.15, 0.01, 0, 0), (0, 0, 0, wz), (vx, 0, 0, 0), (0, 0, 0, -wz),
+  speed_points = ((0, 0, 0, 0), (0, 0, 0, wz), (vx, 0, 0, 0), (0, 0, 0, -wz),
                   (0, -vy, 0, 0), (0, 0, 0, 0), (0, 0, 0, wz))
 
   speed = scipy.interpolate.interp1d(time_points,
@@ -101,8 +103,54 @@ def _generate_example_linear_angular_speed(t):
 
   return speed[0:3], speed[3], False
 
+def _setup_three_leg_controller(robot):
+    """Demonstrates how to create a locomotion controller."""
+    desired_speed = (0, 0)
+    desired_twisting_speed = 0
 
-def _setup_controller(robot):
+    gait_generator = three_leg_balance_openloop_gait_generator.OpenloopGaitGenerator(
+        robot,
+        stance_duration=_STANCE_DURATION_SECONDS,
+        duty_factor=_DUTY_FACTOR,
+        initial_leg_phase=_INIT_PHASE_FULL_CYCLE,
+        initial_leg_state=_INIT_LEG_STATE,
+        lift_time = 0.5)
+
+    window_size = 20 if not FLAGS.use_real_robot else 1
+    state_estimator = com_velocity_estimator.COMVelocityEstimator(
+        robot, window_size=window_size)
+    sw_controller = three_leg_balance_raibert_swing_leg_controller.RaibertSwingLegController(
+        robot,
+        gait_generator,
+        state_estimator,
+        desired_speed=desired_speed,
+        desired_twisting_speed=desired_twisting_speed,
+        desired_height=robot.MPC_BODY_HEIGHT,
+        foot_clearance=robot.MPC_BODY_HEIGHT/2,
+        )
+
+    st_controller = torque_stance_leg_controller.TorqueStanceLegController(
+        robot,
+        gait_generator,
+        state_estimator,
+        desired_speed=desired_speed,
+        desired_twisting_speed=desired_twisting_speed,
+        desired_body_height=robot.MPC_BODY_HEIGHT
+        # ,qp_solver = mpc_osqp.QPOASES #or mpc_osqp.OSQP
+    )
+
+    controller = locomotion_controller.LocomotionController(
+        robot=robot,
+        gait_generator=gait_generator,
+        state_estimator=state_estimator,
+        swing_leg_controller=sw_controller,
+        stance_leg_controller=st_controller,
+        clock=robot.GetTimeSinceReset)
+    return controller
+
+
+
+def _setup_gait_controller(robot):
   """Demonstrates how to create a locomotion controller."""
   desired_speed = (0, 0)
   desired_twisting_speed = 0
@@ -169,16 +217,15 @@ def main(argv):
   p.setAdditionalSearchPath(pybullet_data.getDataPath())
   p.loadURDF("plane100.urdf")
 
-  #the visual shape and collision shape can be re-used by all createMultiBody instances (instancing)
-  #p.loadURDF("YcbFoamBrick/model.urdf")
+  #Terrain Environment
   boxHalfLength = 1
   boxHalfWidth = 1
   boxHalfHeight = 0.1
   sh_colBox = p.createCollisionShape(p.GEOM_BOX,halfExtents=[boxHalfLength,boxHalfWidth,boxHalfHeight])
-  #mass = 1
   block2=p.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
                           basePosition = [1.3,0.6,-0.05],baseOrientation=[0.0,0.0,0.0,1])
   #p.changeDynamics(block2, -1, linearDamping=0,angularDamping=0, rollingFriction = 0, spinningFriction = 0, lateralFriction = 0.4)
+
   # Construct robot class:
   if FLAGS.use_real_robot:
     from motion_imitation.robots import a1_robot
@@ -192,11 +239,11 @@ def main(argv):
     robot = a1.A1(p,
                   motor_control_mode=robot_config.MotorControlMode.HYBRID,
                   enable_action_interpolation=False,
-                  reset_time=3,
+                  reset_time=2,
                   time_step=0.002,
                   action_repeat=1)
 
-  controller = _setup_controller(robot)
+  controller = _setup_three_leg_controller(robot)
 
   controller.reset()
   if FLAGS.use_gamepad:
@@ -213,18 +260,231 @@ def main(argv):
   start_time = robot.GetTimeSinceReset()
   current_time = start_time
   com_vels, imu_rates, actions = [], [], []
+
+  action_start = robot.GetMotorAngles()
+  action_initial = np.array([0., 0.9, -2 * 0.9] * 4)  # intial height set by low-level controller - ~0.24m
+  #action_final = np.array([0., 1., -2*1.] + [0., 0.9, -2 * 0.9] * 3)
+
+  action_final = np.array([0.3, 0.9, -2 * 0.9] + [0.3, 0.9, -2 * 0.9] + [0.3, 0.6, -2 * 0.9] + [0.3, 0.6, -2 * 0.9])
+
+  cumulative_foot_forces = []
+  timesteps = 0
+
+  num_steps_to_reset = 5000
+  for cur_step_ in range(num_steps_to_reset):
+      action = action_initial * (
+                  num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      robot.Step(action, robot_config.MotorControlMode.POSITION)
+
+      time_dict = {'current_time': timesteps}
+      foot_forces = robot.GetFootForce()
+      print("Foot Forces:", foot_forces)
+      df_dict = dict(time_dict)
+      df_dict.update(foot_forces)
+      cumulative_foot_forces.append(df_dict)
+      timesteps += 1
+      controller.update()
+
+      time.sleep(robot.time_step)
+
+  num_steps_to_reset = 5000
+
+  action_initial = np.copy(action_final) #= np.array([-0.15, 0.9, -2 * 0.9] + [0.15, 0.9, -2 * 0.9] + [-0.15, 0.7, -2 * 0.9] + [0.15, 0.7, -2 * 0.9])#np.array([0., 1.2, -2 * 1.2] + [0.15, 0.9, -2 * 0.9] + [0.0, 1, -2 * 0.9] + [0.15, 1, -2 * 0.9])
+  desired_foot_position = [0.181,0.15,-0.03]
+  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  for cur_step_ in range(num_steps_to_reset):
+      action = action_initial * (
+              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      robot.Step(action, robot_config.MotorControlMode.POSITION)
+
+      time_dict = {'current_time': timesteps}
+      foot_forces = robot.GetFootForce()
+      print("Foot Forces:", foot_forces)
+      df_dict = dict(time_dict)
+      df_dict.update(foot_forces)
+      cumulative_foot_forces.append(df_dict)
+      timesteps += 1
+      controller.update()
+
+      time.sleep(robot.time_step)
+
+  num_steps_to_reset = 10000
+
+  action_initial = np.copy(action_final)
+  desired_foot_position = [0.35,0.15,0]
+  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+
+  for cur_step_ in range(num_steps_to_reset):
+      action = action_initial * (
+              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      robot.Step(action, robot_config.MotorControlMode.POSITION)
+
+      time_dict = {'current_time': timesteps}
+      foot_forces = robot.GetFootForce()
+      print("Foot Forces:", foot_forces)
+      df_dict = dict(time_dict)
+      df_dict.update(foot_forces)
+      cumulative_foot_forces.append(df_dict)
+      timesteps += 1
+      controller.update()
+
+      time.sleep(robot.time_step)
+
+  num_steps_to_reset = 10000
+
+  action_initial = np.copy(action_final)
+  desired_foot_position = [0.35,0.15,-0.3]
+  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+
+  for cur_step_ in range(num_steps_to_reset):
+      action = action_initial * (
+              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      robot.Step(action, robot_config.MotorControlMode.POSITION)
+
+      time_dict = {'current_time': timesteps}
+      foot_forces = robot.GetFootForce()
+      print("Foot Forces:", foot_forces)
+      df_dict = dict(time_dict)
+      df_dict.update(foot_forces)
+      cumulative_foot_forces.append(df_dict)
+      timesteps += 1
+      controller.update()
+
+      trigger_foot_force = foot_forces['10']
+      if trigger_foot_force > 15:
+          action_initial = robot.GetMotorAngles()
+          action_initial = action
+          print('contact')
+          controller.update()
+          break
+
+      time.sleep(robot.time_step)
+
+  num_steps_to_reset = 1000
+
+  desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
+  desired_foot_position[2] = desired_foot_position[2] + 0.1
+  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+
+  for cur_step_ in range(num_steps_to_reset):
+      action = action_initial * (
+              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      robot.Step(action, robot_config.MotorControlMode.POSITION)
+
+      time_dict = {'current_time': timesteps}
+      foot_forces = robot.GetFootForce()
+      print("Foot Forces:", foot_forces)
+      df_dict = dict(time_dict)
+      df_dict.update(foot_forces)
+      cumulative_foot_forces.append(df_dict)
+      timesteps += 1
+      controller.update()
+
+      time.sleep(robot.time_step)
+
+  num_steps_to_reset = 5000
+
+  action_initial = action_final
+  desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
+  desired_foot_position[0] = desired_foot_position[0] - 0.23
+  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+
+  for cur_step_ in range(num_steps_to_reset):
+      action = action_initial * (
+              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      robot.Step(action, robot_config.MotorControlMode.POSITION)
+
+      time_dict = {'current_time': timesteps}
+      foot_forces = robot.GetFootForce()
+      print("Foot Forces:", foot_forces)
+      df_dict = dict(time_dict)
+      df_dict.update(foot_forces)
+      cumulative_foot_forces.append(df_dict)
+      timesteps += 1
+      controller.update()
+
+      time.sleep(robot.time_step)
+
+  num_steps_to_reset = 2000
+  action_initial = np.copy(action_final)
+  action_final = action_start
+  for cur_step_ in range(num_steps_to_reset):
+      action = action_initial * (
+                  num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      robot.Step(action, robot_config.MotorControlMode.POSITION)
+
+      time_dict = {'current_time': timesteps}
+      foot_forces = robot.GetFootForce()
+      print("Foot Forces:", foot_forces)
+      df_dict = dict(time_dict)
+      df_dict.update(foot_forces)
+      cumulative_foot_forces.append(df_dict)
+      timesteps += 1
+      controller.update()
+
+      time.sleep(robot.time_step)
+
+  num_steps_to_reset = 5000
+
+
+  num_steps_to_reset = 1000
+
+  action_initial = np.copy(action_final)
+
+  for cur_step_ in range(num_steps_to_reset):
+      action = action_initial * (
+              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      robot.Step(action, robot_config.MotorControlMode.POSITION)
+
+      time_dict = {'current_time': timesteps}
+      foot_forces = robot.GetFootForce()
+      print("Foot Forces:", foot_forces)
+      df_dict = dict(time_dict)
+      df_dict.update(foot_forces)
+      cumulative_foot_forces.append(df_dict)
+      timesteps += 1
+      controller.update()
+
+      time.sleep(robot.time_step)
+
+  global _DUTY_FACTOR
+  global _INIT_PHASE_FULL_CYCLE
+  global _INIT_LEG_STATE
+  _DUTY_FACTOR = [0.6] * 4
+  _INIT_PHASE_FULL_CYCLE = [0.9,0,0,0.9]
+  _INIT_LEG_STATE = (
+      gait_generator_lib.LegState.SWING,
+      gait_generator_lib.LegState.STANCE,
+      gait_generator_lib.LegState.STANCE,
+      gait_generator_lib.LegState.SWING
+    )
+  controller = _setup_gait_controller(robot)
+  controller.reset()
+  controller.update()
+
+  if FLAGS.use_gamepad:
+    gamepad = gamepad_reader.Gamepad()
+    command_function = gamepad.get_command
+  else:
+    command_function = _generate_example_linear_angular_speed
+
+  if FLAGS.logdir:
+    logdir = os.path.join(FLAGS.logdir,
+                          datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
+    os.makedirs(logdir)
+
+  start_time = robot.GetTimeSinceReset()
+  current_time = start_time
+  com_vels, imu_rates, actions = [], [], []
   while current_time - start_time < FLAGS.max_time_secs:
+    print('work')
     #time.sleep(0.0008) #on some fast computer, works better with sleep on real A1?
     start_time_robot = current_time
     start_time_wall = time.time()
     # Updates the controller behavior parameters.
     lin_speed, ang_speed, e_stop = command_function(current_time) #command_function(current_time)
-    if current_time > 1.5 and current_time < 8:
-      lin_speed = np.array([0.03,-0.2,0])
-    elif current_time > 0.5 and current_time < 8:
-      lin_speed = np.array([-0.2,0.01,0])
-    elif current_time > 8 and current_time < 10:
-      lin_speed = np.array([0.03, 0.01, 0])
+    if current_time > 0.5:
+      lin_speed = np.array([0.1,0,0])
     if e_stop:
       logging.info("E-stop kicked, exiting...")
       break
@@ -237,8 +497,6 @@ def main(argv):
     actions.append(hybrid_action)
     #print("Motor Controls: ")
     #print(hybrid_action)
-    start = False
-    print(hybrid_action)
     robot.Step(hybrid_action)
     current_time = robot.GetTimeSinceReset()
 
