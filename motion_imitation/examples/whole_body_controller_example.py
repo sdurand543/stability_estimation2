@@ -29,7 +29,7 @@ from mpc_controller import raibert_swing_leg_controller
 #from mpc_controller import torque_stance_leg_controller
 #import mpc_osqp
 from mpc_controller import torque_stance_leg_controller_quadprog as torque_stance_leg_controller
-
+from stability_estimation_controller import balanced_stance_leg_controller
 
 from motion_imitation.robots import a1
 from motion_imitation.robots import robot_config
@@ -129,7 +129,17 @@ def _setup_three_leg_controller(robot):
         foot_clearance=robot.MPC_BODY_HEIGHT/2,
         )
 
-    st_controller = torque_stance_leg_controller.TorqueStanceLegController(
+    st_controller = balanced_stance_leg_controller.BalancedStanceLegController(
+        robot,
+        gait_generator,
+        state_estimator,
+        desired_speed=desired_speed,
+        desired_height=robot.MPC_BODY_HEIGHT
+        # ,qp_solver = mpc_osqp.QPOASES #or mpc_osqp.OSQP
+    )
+
+    '''
+    torque_stance_leg_controller.TorqueStanceLegController(
         robot,
         gait_generator,
         state_estimator,
@@ -138,6 +148,7 @@ def _setup_three_leg_controller(robot):
         desired_body_height=robot.MPC_BODY_HEIGHT
         # ,qp_solver = mpc_osqp.QPOASES #or mpc_osqp.OSQP
     )
+    '''
 
     controller = locomotion_controller.LocomotionController(
         robot=robot,
