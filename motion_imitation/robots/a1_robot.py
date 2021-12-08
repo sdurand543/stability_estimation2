@@ -231,6 +231,14 @@ class A1Robot(a1.A1):
   def GetBaseVelocity(self):
     return self._velocity_estimator.estimated_velocity.copy()
 
+  def GetFootForce(self):
+    raw_forces = self._raw_state.footForce
+    forces = dict()
+    link_ids = ['5', '10', '15', '20']
+    for i in range(len(raw_forces))
+      forces[link_ids[i]] = raw_forces[i]
+    return forces
+
   def GetFootContacts(self):
     return np.array(self._raw_state.footForce) > 20
 
