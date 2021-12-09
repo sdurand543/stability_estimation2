@@ -29,7 +29,7 @@ except:  #pylint: disable=W0702
   print("or use pip3 install motion_imitation --user")
   sys.exit()
 
-_KP = [np.array([0.05, 0.05, 5]), np.array([0.05, 0.05, 5]), np.array([0.05, 0.05, 5]), np.array([0.05, 0.05, 5])]
+_KP = [np.array([0.05, 0.05, 0.1]), np.array([0.05, 0.05, 0.1]), np.array([0.05, 0.05, 0.1]), np.array([0.05, 0.05, 0.1])]
 _KI = [np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0])]
 _KD = [np.array([0.00, 0.00, 0.0]), np.array([0.00, 0.00, 0.0]), np.array([0.00, 0.00, 0.0]), np.array([0.00, 0.00, 0.0])]
 
@@ -156,7 +156,7 @@ class BalancedStanceLegController(leg_controller.LegController):
       boxed_foot_position = foot_position
 
       # Taking into Account Hips (Getting Minimum Breadth)
-      '''
+
       min_hips = 1.0
       max_hips = 1.3
       if leg_id == 0: # front left
@@ -179,7 +179,7 @@ class BalancedStanceLegController(leg_controller.LegController):
         boxed_foot_position[1] = max(min_hips * hip_offset[1], foot_position[1])
         boxed_foot_position[0] = min(max_hips * hip_offset[0], foot_position[0])
         boxed_foot_position[1] = min(max_hips * hip_offset[1], foot_position[1])
-      '''
+
       
       desired_foot_position_2d = boxed_foot_position[0:2] - desired_com_position_2d
       desired_foot_position = np.array(
