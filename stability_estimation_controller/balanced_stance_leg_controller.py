@@ -29,9 +29,9 @@ except:  #pylint: disable=W0702
   print("or use pip3 install motion_imitation --user")
   sys.exit()
 
-_KP = [np.array([0.3, 0.3, 0.3]), np.array([0.3, 0.3, 0.3]), np.array([0.3, 0.3, 0.3]), np.array([0.3, 0.3, 0.3])]
-_KI = [np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00])]
-_KD = [np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00])]
+_KP = [np.array([0.05, 0.05, 0.20]), np.array([0.05, 0.05, 0.2]), np.array([0.05, 0.05, 0.2]), np.array([0.05, 0.05, 0.2])]
+_KI = [np.array([0.001, 0.001, 0.01]), np.array([0.001, 0.001, 0.01]), np.array([0.001, 0.001, 0.01]), np.array([0.001, 0.001, 0.01])]
+_KD = [np.array([0.00, 0.00, 0.2]), np.array([0.00, 0.00, 0.2]), np.array([0.00, 0.00, 0.2]), np.array([0.00, 0.00, 0.2])]
 
 class BalancedStanceLegController(leg_controller.LegController):
   """Controls the stance leg position using a PID controller and joint angle model prediction
@@ -134,20 +134,17 @@ class BalancedStanceLegController(leg_controller.LegController):
     
     # Get a List of STANCE Feet and Calculate Desired COM Positions
     desired_com_position_2d = np.array([0., 0.], dtype=np.float64)
-    stance_legs = {} # Mapping[leg_id, (foot_position_bf, twisting_vector_bf)]
+    stance_legs = {} # Mapping[leg_id, (foot_position_bf, hip_offset_bf)]
     for leg_id, leg_state in enumerate(self._gait_generator.leg_state):
-      #hip_offset = hip_positions[leg_id]
-      #twisting_vector = np.array((-hip_offset[1], hip_offset[0], 0))
       if leg_state is gait_generator_lib.LegState.STANCE:
+        hip_offset = hip_positions[leg_id]
         foot_position_bf = foot_positions[leg_id]
         print("CURR_FOOT_POSITION: ", foot_position_bf)
-        stance_legs[leg_id] = foot_position_bf
+        stance_legs[leg_id] = ( foot_position_bf, hip_offset )
         desired_com_position_2d += foot_position_bf[0:2]
     
     # Center of STANCE Leg Polygon
     desired_com_position_2d = desired_com_position_2d / len(stance_legs)
-
-    #desired_com_position_2d = self._desired_com[0:2]
 
     # Delegate Desired Motion
     desired_com_position = np.array([desired_com_position_2d[0],
@@ -155,10 +152,39 @@ class BalancedStanceLegController(leg_controller.LegController):
                                      self._desired_height],
                                     dtype=np.float64)
 
-    for leg_id, foot_position in stance_legs.items():
-      #if (leg_id != 3):
-      #continue
-      desired_foot_position_2d = foot_position[0:2] - desired_com_position_2d
+    for leg_id, foot_info in stance_legs.items():
+      foot_position = foot_info[0]
+      hip_offset = foot_info[1]
+      boxed_foot_position = foot_position
+
+      # Taking into Account Hips (Getting Minimum Breadth)
+      '''
+      min_hips = 1.0
+      max_hips = 1.3
+      if leg_id == 0: # front left
+        boxed_foot_position[0] = min(min_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = min(min_hips * hip_offset[1], foot_position[1])
+        boxed_foot_position[0] = max(max_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = max(max_hips * hip_offset[1], foot_position[1])
+      if leg_id == 1: # front right
+        boxed_foot_position[0] = min(min_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = max(min_hips * hip_offset[1], foot_position[1])
+        boxed_foot_position[0] = max(max_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = min(max_hips * hip_offset[1], foot_position[1])
+      if leg_id == 2: # back left
+        boxed_foot_position[0] = max(min_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = min(min_hips * hip_offset[1], foot_position[1])
+        boxed_foot_position[0] = min(max_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = max(max_hips * hip_offset[1], foot_position[1])
+      if leg_id == 3: # back right
+        boxed_foot_position[0] = max(min_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = max(min_hips * hip_offset[1], foot_position[1])
+        boxed_foot_position[0] = min(max_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = min(max_hips * hip_offset[1], foot_position[1])
+      '''
+        
+      
+      desired_foot_position_2d = boxed_foot_position[0:2] - desired_com_position_2d
       desired_foot_position = np.array(
         [desired_foot_position_2d[0], desired_foot_position_2d[1],
          -self._desired_height],

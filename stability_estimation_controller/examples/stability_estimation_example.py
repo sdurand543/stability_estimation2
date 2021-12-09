@@ -12,12 +12,18 @@ from datetime import datetime
 import numpy as np
 import os
 import scipy.interpolate
+from scipy import stats
 import time
 import math
 
 import pybullet_data
 from pybullet_utils import bullet_client
 import pybullet# pytype:disable=import-error
+
+import datetime as datetime
+import matplotlib.pyplot as plt
+import pandas as pd
+
 
 from mpc_controller import three_leg_balance_gait_generator as three_leg_balance_openloop_gait_generator
 from mpc_controller import three_leg_balance_swing_up as three_leg_balance_raibert_swing_leg_controller
@@ -44,7 +50,7 @@ flags.DEFINE_bool("use_gamepad", False,
                   "whether to use gamepad to provide control input.")
 flags.DEFINE_bool("use_real_robot", False,
                   "whether to use real robot or simulation")
-flags.DEFINE_bool("show_gui", True, "whether to show GUI.")
+flags.DEFINE_bool("show_gui", False, "whether to show GUI.")
 flags.DEFINE_float("max_time_secs", 30., "maximum time to run the robot.")
 FLAGS = flags.FLAGS
 
@@ -223,7 +229,8 @@ def main(argv):
   p.setGravity(0, 0, -9.8)
   p.setPhysicsEngineParameter(enableConeFriction=0)
   p.setAdditionalSearchPath(pybullet_data.getDataPath())
-  p.loadURDF("plane100.urdf")
+  plane_id = p.loadURDF("plane100.urdf")
+  p.changeDynamics(plane_id, -1, lateralFriction=0.8)
 
   #Terrain Environment
   boxHalfLength = 1
@@ -252,7 +259,8 @@ def main(argv):
                   action_repeat=1)
 
   controller = _setup_three_leg_controller(robot)
-
+  controller.reset(0)
+  
   if FLAGS.use_gamepad:
     gamepad = gamepad_reader.Gamepad()
     command_function = gamepad.get_command
@@ -267,8 +275,6 @@ def main(argv):
 
   start_time = robot.GetTimeSinceReset()  
   current_time = start_time
-  controller.reset(current_time)
-
   com_vels, imu_rates, actions = [], [], []
   
   cumulative_foot_forces = []
@@ -290,7 +296,7 @@ def main(argv):
       print("Controller Action (should be 0):", controller_action)
       for joint_id in range(12):
         if joint_id in controller_action:
-          joint_angles_curr = np.append(joint_angles_curr, controller_action.get(joint_id))
+          joint_angles_curr = np.append(joint_angles_curr, controller_action.get(joint_id)[0])
         else:
           joint_angles_curr = np.append(joint_angles_curr, foot_joint_angles_curr[joint_id-(1*3)])
           
@@ -324,21 +330,16 @@ def main(argv):
     print(desired_foot_joint_angles_end)
     return actuate_foot2_joint_angles(desired_foot_joint_angles_end, duration, testing)
 
+  start_time = robot.GetTimeSinceReset()
+  current_time = start_time
+  com_vels, imu_rates, actions = [], [], []
 
-    
   ACTION_INITIAL = np.array([0, 0.9, -1.8] * 4)
+  print("ACTION_INITIAL", ACTION_INITIAL)
   robot.Step(robot.GetMotorAngles(), robot_config.MotorControlMode.POSITION)
-
-  print("THIS IS MOTOR ANGLES", robot.GetMotorAngles())
-  time.sleep(5)
-  for i in range(1000):
-    robot.Step(robot.GetMotorAngles(), robot_config.MotorControlMode.POSITION)
-    time.sleep(robot.time_step)
-  print("SOL: ", robot.ComputeMotorAnglesFromFootLocalPosition(1, [0.3, 0.9, -2 * 0.9])[1])
-  exit()
-
-  #curr_joint_angles = robot.GetMotorAngles()
-  #curr_joint_angles = actuate_foot2_position(robot.GetFootPositionsInBaseFrame()[1], 5000)
+  
+  curr_joint_angles = robot.GetMotorAngles()
+  curr_joint_angles = actuate_foot2_position(robot.GetFootPositionsInBaseFrame()[1], 5000)
   curr_joint_angles = actuate_foot2_position([0.3, 0.9, -2 * 0.9], 5000)
   #curr_joint_angles = actuate_foot2_position(curr_joint_angles, [0.181, 0.15, -0.03], 5000)
   #curr_joint_angles = actuate_foot2_position(curr_joint_angles, [0.35, 0.15, 0.0], 10000)

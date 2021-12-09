@@ -211,7 +211,8 @@ def main(argv):
   p.setGravity(0, 0, -9.8)
   p.setPhysicsEngineParameter(enableConeFriction=0)
   p.setAdditionalSearchPath(pybullet_data.getDataPath())
-  p.loadURDF("plane100.urdf")
+  plane_id = p.loadURDF("plane100.urdf")
+  #p.changeDynamics(plane_id, -1, lateralFriction=0.8)
 
   #Terrain Environment
   boxHalfLength = 1
