@@ -2,3 +2,4 @@ build/
 dist/
 *.so
 mpc_controller/__pycache__
+foot_force_plots/
