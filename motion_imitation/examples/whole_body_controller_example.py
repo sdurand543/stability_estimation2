@@ -32,8 +32,6 @@ from mpc_controller import gait_generator as gait_generator_lib
 from mpc_controller import locomotion_controller
 from mpc_controller import openloop_gait_generator
 from mpc_controller import raibert_swing_leg_controller
-#from mpc_controller import torque_stance_leg_controller
-#import mpc_osqp
 from mpc_controller import torque_stance_leg_controller_quadprog as torque_stance_leg_controller
 
 
@@ -97,9 +95,8 @@ def _generate_example_linear_angular_speed(t):
   vy = 0
   wz = 0
 
-  time_points = (0, 30, 30, 30, 30, 30, 30)
-  speed_points = ((0, 0, 0, 0), (0, 0, 0, wz), (vx, 0, 0, 0), (0, 0, 0, -wz),
-                  (0, -vy, 0, 0), (0, 0, 0, 0), (0, 0, 0, wz))
+  time_points = (0, 30)
+  speed_points = ((vx, vy, 0, wz), (0, 0, 0, 0))
 
   speed = scipy.interpolate.interp1d(time_points,
                                      speed_points,
@@ -206,6 +203,11 @@ def _update_controller_params(controller, lin_speed, ang_speed):
   controller.stance_leg_controller.desired_speed = lin_speed
   controller.stance_leg_controller.desired_twisting_speed = ang_speed
 
+def _placement_xyz(initial_Position,distance, theta, z):
+  # initial_Position = np.array(x,y,z) (m)
+  # distance (m)
+  # theta (radians) (Forward = 0, Left = -pi/2)
+  return np.array([initial_Position[0] + distance*np.cos(theta),initial_Position[1] - distance*np.sin(theta),z])
 
 def main(argv):
   """Runs the locomotion controller example."""
@@ -221,16 +223,16 @@ def main(argv):
   p.setGravity(0, 0, -9.8)
   p.setPhysicsEngineParameter(enableConeFriction=0)
   p.setAdditionalSearchPath(pybullet_data.getDataPath())
-  p.loadURDF("plane100.urdf")
-
+  planeID = p.loadURDF("plane100.urdf")
+  p.changeDynamics(planeID, -1, lateralFriction = 0.8)
   #Terrain Environment
   boxHalfLength = 1
   boxHalfWidth = 1
   boxHalfHeight = 0.1
   sh_colBox = p.createCollisionShape(p.GEOM_BOX,halfExtents=[boxHalfLength,boxHalfWidth,boxHalfHeight])
   block2=p.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                          basePosition = [1.3,0.6,-0.05],baseOrientation=[0.0,0.0,0.0,1])
-  #p.changeDynamics(block2, -1, linearDamping=0,angularDamping=0, rollingFriction = 0, spinningFriction = 0, lateralFriction = 0.4)
+                          basePosition = [1.28,0.6,-0.05],baseOrientation=[0.0,0.0,0.0,1])
+  #p.changeDynamics(block2, -1, linearDamping=0,angularDamping=0, rollingFriction = 0, spinningFriction = 0, lateralFriction = 0.2)
 
   # Construct robot class:
   if FLAGS.use_real_robot:
@@ -250,6 +252,8 @@ def main(argv):
                   action_repeat=1)
 
   controller = _setup_three_leg_controller(robot)
+
+  #cubeID = p.loadSoftBody('cube.obj', scale = 0.5, basePosition = [1.25,0,0.1], mass = 1, useMassSpring = 1, s)
 
   controller.reset()
   if FLAGS.use_gamepad:
@@ -276,7 +280,7 @@ def main(argv):
   cumulative_foot_forces = []
   timesteps = 0
 
-  num_steps_to_reset = 5000
+  num_steps_to_reset = 2500
   for cur_step_ in range(num_steps_to_reset):
       action = action_initial * (
                   num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
@@ -293,7 +297,7 @@ def main(argv):
 
       time.sleep(robot.time_step)
 
-  num_steps_to_reset = 5000
+  num_steps_to_reset = 2500
 
   action_initial = np.copy(action_final) #= np.array([-0.15, 0.9, -2 * 0.9] + [0.15, 0.9, -2 * 0.9] + [-0.15, 0.7, -2 * 0.9] + [0.15, 0.7, -2 * 0.9])#np.array([0., 1.2, -2 * 1.2] + [0.15, 0.9, -2 * 0.9] + [0.0, 1, -2 * 0.9] + [0.15, 1, -2 * 0.9])
   desired_foot_position = [0.181,0.15,-0.03]
@@ -314,7 +318,7 @@ def main(argv):
 
       time.sleep(robot.time_step)
 
-  num_steps_to_reset = 10000
+  num_steps_to_reset = 5000
 
   action_initial = np.copy(action_final)
   desired_foot_position = [0.35,0.15,0]
@@ -336,12 +340,12 @@ def main(argv):
 
       time.sleep(robot.time_step)
 
-  num_steps_to_reset = 10000
+  num_steps_to_reset = 5000
 
   action_initial = np.copy(action_final)
   desired_foot_position = [0.35,0.15,-0.3]
   action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
-  
+
   timesteps_reg = []
   position_profile_x = []
   position_profile_y = []
@@ -349,6 +353,12 @@ def main(argv):
   data_collection = False
   FOOT_SENSOR_NOISE_THRESHOLD = 0
   DATA_COLLECTION_STOP_THRESHOLD = 15
+  MAX_FORCE = 0
+  STABLE_FACTOR = 0.3
+  BREAK = False
+  START_HEIGHT = 0
+  SKIP_TEN = 0
+  STABLE = False
   position_profile_slope_x = 0
   position_profile_slope_y = 0
   position_profile_slope_z = 0
@@ -366,12 +376,16 @@ def main(argv):
       cumulative_foot_forces.append(df_dict)
       timesteps += 1
       controller.update()
-
       trigger_foot_force = foot_forces['10']
       if trigger_foot_force > FOOT_SENSOR_NOISE_THRESHOLD and not data_collection:
         data_collection = True
         data_collection_start_time = time.time()
         data_collection_end_time = time.time()
+        print(SKIP_TEN)
+        SKIP_TEN = cur_step_ + 10
+
+      if trigger_foot_force > MAX_FORCE and cur_step_ > SKIP_TEN:
+        MAX_FORCE = trigger_foot_force
 
       if data_collection and trigger_foot_force <= DATA_COLLECTION_STOP_THRESHOLD:
         current_timestep = time.time() - data_collection_start_time
@@ -381,28 +395,50 @@ def main(argv):
         position_profile_y.append(current_foot_position[1])
         position_profile_z.append(current_foot_position[2])
 
+      if trigger_foot_force > DATA_COLLECTION_STOP_THRESHOLD - 5:
+        if STABLE:
+          pass
+        else:
+          p.resetBasePositionAndOrientation(block2, [1.28,0.6,-0.08],[0.0,0.0,0.0,1])
+      if data_collection and trigger_foot_force < MAX_FORCE*STABLE_FACTOR:
+        data_collection = False
+        data_collection_end_time = timesteps
+
+        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_x)
+        position_profile_slope_x = slope
+        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_y)
+        position_profile_slope_y = slope
+        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_z)
+        position_profile_slope_z = slope
+
+        action_initial = robot.GetMotorAngles()
+        action_initial = action
+        BREAK = True
+        print('Break')
+        controller.update()
+        break
+
       if trigger_foot_force > DATA_COLLECTION_STOP_THRESHOLD:
         data_collection = False
         data_collection_end_time = timesteps
-        
-        slope, intercept, r, p, std_err = stats.linregress(timesteps_reg, position_profile_x)
+
+        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_x)
         position_profile_slope_x = slope
-        slope, intercept, r, p, std_err = stats.linregress(timesteps_reg, position_profile_y)
+        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_y)
         position_profile_slope_y = slope
-        slope, intercept, r, p, std_err = stats.linregress(timesteps_reg, position_profile_z)
+        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_z)
         position_profile_slope_z = slope
-        
+
         action_initial = robot.GetMotorAngles()
         action_initial = action
-        
-        print('contact')
+
+        print('Max reached')
         controller.update()
         break
 
       time.sleep(robot.time_step)
 
   num_steps_to_reset = 1000
-
   desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
   desired_foot_position[2] = desired_foot_position[2] + 0.1
   action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
@@ -422,9 +458,7 @@ def main(argv):
       controller.update()
 
       time.sleep(robot.time_step)
-
   num_steps_to_reset = 5000
-
   action_initial = action_final
   desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
   desired_foot_position[0] = desired_foot_position[0] - 0.23
@@ -446,7 +480,7 @@ def main(argv):
 
       time.sleep(robot.time_step)
 
-  num_steps_to_reset = 2000
+  num_steps_to_reset = 1000
   action_initial = np.copy(action_final)
   action_final = action_start
   for cur_step_ in range(num_steps_to_reset):
@@ -464,9 +498,6 @@ def main(argv):
       controller.update()
 
       time.sleep(robot.time_step)
-
-  num_steps_to_reset = 5000
-
 
   num_steps_to_reset = 1000
 
@@ -523,8 +554,13 @@ def main(argv):
     start_time_wall = time.time()
     # Updates the controller behavior parameters.
     lin_speed, ang_speed, e_stop = command_function(current_time) #command_function(current_time)
-    if current_time > 0.5:
-      lin_speed = np.array([0.1,0,0])
+    if current_time > start_time + 0.5 and BREAK == False:
+      lin_speed = np.array([0.12,0,0])
+    if current_time > start_time + 0.5 and BREAK == True:
+      if current_time - start_time < 8:
+       lin_speed = np.array([0,-0.2,0])
+      else:
+       lin_speed = np.array([0.12,0,0])
     if e_stop:
       logging.info("E-stop kicked, exiting...")
       break
@@ -552,8 +588,8 @@ def main(argv):
   print("Z Slope:", position_profile_slope_z)
 
   df = pd.DataFrame(cumulative_foot_forces)
-  df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
-  plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
+  # df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
+  # plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
   # plt.show()
 
   if FLAGS.use_gamepad:
