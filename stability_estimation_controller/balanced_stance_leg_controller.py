@@ -29,9 +29,9 @@ except:  #pylint: disable=W0702
   print("or use pip3 install motion_imitation --user")
   sys.exit()
 
-_KP = [np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01])]
-_KI = [np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01])]
-_KD = [np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01])]
+_KP = [np.array([0.3, 0.3, 0.3]), np.array([0.3, 0.3, 0.3]), np.array([0.3, 0.3, 0.3]), np.array([0.3, 0.3, 0.3])]
+_KI = [np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00])]
+_KD = [np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00]), np.array([0.00, 0.00, 0.00])]
 
 class BalancedStanceLegController(leg_controller.LegController):
   """Controls the stance leg position using a PID controller and joint angle model prediction
@@ -90,7 +90,9 @@ class BalancedStanceLegController(leg_controller.LegController):
     self._phase_switch_foot_local_position = (
       self._robot.GetFootPositionsInBaseFrame())
     self._joint_angles = {}
-
+    self._desired_com = np.array([0, 0, 0], dtype=np.float64)
+    foot_positions = self._robot.GetFootPositionsInBaseFrame()
+  
   def update(self, current_time: float) -> None:
     """Called at each control step.
 
@@ -124,22 +126,28 @@ class BalancedStanceLegController(leg_controller.LegController):
   """
 
   def get_action(self) -> Mapping[Any, Any]:
-    
+
+    print("THIS FUNCTION IS CALLED")
     # Get all Foot Positions
+    hip_positions = self._robot.GetHipPositionsInBaseFrame()
     foot_positions = self._robot.GetFootPositionsInBaseFrame()
     
     # Get a List of STANCE Feet and Calculate Desired COM Positions
     desired_com_position_2d = np.array([0., 0.], dtype=np.float64)
-    stance_legs = {} # Mapping[leg_id, foot_position_bf]
+    stance_legs = {} # Mapping[leg_id, (foot_position_bf, twisting_vector_bf)]
     for leg_id, leg_state in enumerate(self._gait_generator.leg_state):
-      if leg_state in (gait_generator_lib.LegState.STANCE,
-                       gait_generator_lib.LegState.LOSE_CONTACT): #include EARLY_CONTACT
+      #hip_offset = hip_positions[leg_id]
+      #twisting_vector = np.array((-hip_offset[1], hip_offset[0], 0))
+      if leg_state is gait_generator_lib.LegState.STANCE:
         foot_position_bf = foot_positions[leg_id]
+        print("CURR_FOOT_POSITION: ", foot_position_bf)
         stance_legs[leg_id] = foot_position_bf
-        desired_com_position_2d += foot_position_bf[0:1]
-
+        desired_com_position_2d += foot_position_bf[0:2]
+    
     # Center of STANCE Leg Polygon
     desired_com_position_2d = desired_com_position_2d / len(stance_legs)
+
+    #desired_com_position_2d = self._desired_com[0:2]
 
     # Delegate Desired Motion
     desired_com_position = np.array([desired_com_position_2d[0],
@@ -148,38 +156,45 @@ class BalancedStanceLegController(leg_controller.LegController):
                                     dtype=np.float64)
 
     for leg_id, foot_position in stance_legs.items():
-      
-      desired_foot_position_2d = foot_position[0:1] - desired_com_position_2d
+      #if (leg_id != 3):
+      #continue
+      desired_foot_position_2d = foot_position[0:2] - desired_com_position_2d
       desired_foot_position = np.array(
         [desired_foot_position_2d[0], desired_foot_position_2d[1],
          -self._desired_height],
         dtype=np.float64)
       
       # Update PID State
+      alpha = 0.3
       error = desired_foot_position - foot_position
-      self.error_integral[leg_id] += error
+      self.error_integral[leg_id] = alpha * self.error_integral[leg_id] + error
       error_derivative = error - self.error_prev[leg_id]
       self.error_prev[leg_id] = error
+      
+      print("ERROR")
+      print(error)
       
       # Get Input Actuation
       u = (_KP[leg_id] * error
            + _KI[leg_id] * self.error_integral[leg_id]
            + _KD[leg_id] * error_derivative)
-
+      
       # Get Total Position
       target_foot_position = foot_position + u
-
+      
+      print("TARGET FOOT", target_foot_position)
+      
       # IK Solution to Target Position
       joint_ids, joint_angles = (
         self._robot.ComputeMotorAnglesFromFootLocalPosition(
-            leg_id, foot_position))
+            leg_id, target_foot_position))
       
       # Update the stored joint angles as needed.
       for joint_id, joint_angle in zip(joint_ids, joint_angles):
         self._joint_angles[joint_id] = (joint_angle, leg_id)
-
+        
     action = {}
-
+    
     kps = self._robot.GetMotorPositionGains()
     kds = self._robot.GetMotorVelocityGains()
     for joint_id, joint_angle_leg_id in self._joint_angles.items():
