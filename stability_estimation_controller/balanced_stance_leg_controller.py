@@ -191,7 +191,7 @@ class BalancedStanceLegController(leg_controller.LegController):
                             kds[joint_id], 0)
         #print("joint_id: ", joint_id)
         #print(self._robot.GetMotorAngles()[joint_id])
-        action[joint_id] = self._robot.GetMotorAngles()[joint_id]
-        action[joint_id] = 0
+        # action[joint_id] = self._robot.GetMotorAngles()[joint_id]
+        # action[joint_id] = 0
 
     return action, None

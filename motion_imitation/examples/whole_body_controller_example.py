@@ -12,12 +12,18 @@ from datetime import datetime
 import numpy as np
 import os
 import scipy.interpolate
+from scipy import stats
 import time
 import math
 
 import pybullet_data
 from pybullet_utils import bullet_client
 import pybullet# pytype:disable=import-error
+
+import datetime as datetime
+import matplotlib.pyplot as plt
+import pandas as pd
+
 
 from mpc_controller import three_leg_balance_gait_generator as three_leg_balance_openloop_gait_generator
 from mpc_controller import three_leg_balance_swing_up as three_leg_balance_raibert_swing_leg_controller
@@ -34,10 +40,6 @@ from stability_estimation_controller import balanced_stance_leg_controller
 from motion_imitation.robots import a1
 from motion_imitation.robots import robot_config
 from motion_imitation.robots.gamepad import gamepad_reader
-
-import pandas as pd
-import matplotlib.pyplot as plt
-import datetime as datetime
 
 flags.DEFINE_string("logdir", None, "where to log trajectories.")
 flags.DEFINE_bool("use_gamepad", False,
@@ -82,8 +84,8 @@ _DUTY_FACTOR = [1] * 4
 _INIT_PHASE_FULL_CYCLE = [0, 0, 0, 0]
 
 _INIT_LEG_STATE = (
-    gait_generator_lib.LegState.SWING,
     gait_generator_lib.LegState.STANCE,
+    gait_generator_lib.LegState.SWING,
     gait_generator_lib.LegState.STANCE,
     gait_generator_lib.LegState.STANCE,
 )
@@ -123,17 +125,8 @@ def _setup_three_leg_controller(robot):
     window_size = 20 if not FLAGS.use_real_robot else 1
     state_estimator = com_velocity_estimator.COMVelocityEstimator(
         robot, window_size=window_size)
-    sw_controller = three_leg_balance_raibert_swing_leg_controller.RaibertSwingLegController(
-        robot,
-        gait_generator,
-        state_estimator,
-        desired_speed=desired_speed,
-        desired_twisting_speed=desired_twisting_speed,
-        desired_height=robot.MPC_BODY_HEIGHT,
-        foot_clearance=robot.MPC_BODY_HEIGHT/2,
-        )
 
-    st_controller = balanced_stance_leg_controller.BalancedStanceLegController(
+    controller = balanced_stance_leg_controller.BalancedStanceLegController(
         robot,
         gait_generator,
         state_estimator,
@@ -142,25 +135,13 @@ def _setup_three_leg_controller(robot):
         # ,qp_solver = mpc_osqp.QPOASES #or mpc_osqp.OSQP
     )
 
-    '''
-    torque_stance_leg_controller.TorqueStanceLegController(
-        robot,
-        gait_generator,
-        state_estimator,
-        desired_speed=desired_speed,
-        desired_twisting_speed=desired_twisting_speed,
-        desired_body_height=robot.MPC_BODY_HEIGHT
-        # ,qp_solver = mpc_osqp.QPOASES #or mpc_osqp.OSQP
-    )
-    '''
-
-    controller = locomotion_controller.LocomotionController(
-        robot=robot,
-        gait_generator=gait_generator,
-        state_estimator=state_estimator,
-        swing_leg_controller=sw_controller,
-        stance_leg_controller=st_controller,
-        clock=robot.GetTimeSinceReset)
+    # controller = locomotion_controller.LocomotionController(
+    #     robot=robot,
+    #     gait_generator=gait_generator,
+    #     state_estimator=state_estimator,
+    #     swing_leg_controller=sw_controller,
+    #     stance_leg_controller=st_controller,
+    #     clock=robot.GetTimeSinceReset)
     return controller
 
 
@@ -260,7 +241,7 @@ def main(argv):
 
   controller = _setup_three_leg_controller(robot)
 
-  controller.reset()
+  controller.reset(0)
   if FLAGS.use_gamepad:
     gamepad = gamepad_reader.Gamepad()
     command_function = gamepad.get_command
@@ -287,11 +268,18 @@ def main(argv):
 
   num_steps_to_reset = 5000
   for cur_step_ in range(num_steps_to_reset):
-      balance_action = controller.get_action()
-      print("Balance Action:", balance_action)
-
-      action = action_initial * (
-                  num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      action_probe = action_initial * (num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      controller_action = controller.get_action()[0]
+      # print("controller action", controller_action)
+      # print(controller_action)
+      action = []
+      for i in range(12):
+        if i in controller_action:
+          action.append(controller_action.get(i)[0])
+        else:
+          action.append(action_probe[i])
+      # print("action probe", action_probe)
+      print(action)
       robot.Step(action, robot_config.MotorControlMode.POSITION)
 
       time_dict = {'current_time': timesteps}
@@ -301,7 +289,7 @@ def main(argv):
       df_dict.update(foot_forces)
       cumulative_foot_forces.append(df_dict)
       timesteps += 1
-      controller.update()
+      controller.update(0)
 
       time.sleep(robot.time_step)
 
@@ -353,6 +341,17 @@ def main(argv):
   action_initial = np.copy(action_final)
   desired_foot_position = [0.35,0.15,-0.3]
   action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  
+  timesteps_reg = []
+  position_profile_x = []
+  position_profile_y = []
+  position_profile_z = []
+  data_collection = False
+  FOOT_SENSOR_NOISE_THRESHOLD = 0
+  DATA_COLLECTION_STOP_THRESHOLD = 15
+  position_profile_slope_x = 0
+  position_profile_slope_y = 0
+  position_profile_slope_z = 0
 
   for cur_step_ in range(num_steps_to_reset):
       action = action_initial * (
@@ -369,12 +368,36 @@ def main(argv):
       controller.update()
 
       trigger_foot_force = foot_forces['10']
-      if trigger_foot_force > 15:
-          action_initial = robot.GetMotorAngles()
-          action_initial = action
-          print('contact')
-          controller.update()
-          break
+      if trigger_foot_force > FOOT_SENSOR_NOISE_THRESHOLD and not data_collection:
+        data_collection = True
+        data_collection_start_time = time.time()
+        data_collection_end_time = time.time()
+
+      if data_collection and trigger_foot_force <= DATA_COLLECTION_STOP_THRESHOLD:
+        current_timestep = time.time() - data_collection_start_time
+        timesteps_reg.append(current_timestep)
+        current_foot_position = robot.GetFootPositionsInBaseFrame()[1]
+        position_profile_x.append(current_foot_position[0])
+        position_profile_y.append(current_foot_position[1])
+        position_profile_z.append(current_foot_position[2])
+
+      if trigger_foot_force > DATA_COLLECTION_STOP_THRESHOLD:
+        data_collection = False
+        data_collection_end_time = timesteps
+        
+        slope, intercept, r, p, std_err = stats.linregress(timesteps_reg, position_profile_x)
+        position_profile_slope_x = slope
+        slope, intercept, r, p, std_err = stats.linregress(timesteps_reg, position_profile_y)
+        position_profile_slope_y = slope
+        slope, intercept, r, p, std_err = stats.linregress(timesteps_reg, position_profile_z)
+        position_profile_slope_z = slope
+        
+        action_initial = robot.GetMotorAngles()
+        action_initial = action
+        
+        print('contact')
+        controller.update()
+        break
 
       time.sleep(robot.time_step)
 
@@ -495,7 +518,6 @@ def main(argv):
   current_time = start_time
   com_vels, imu_rates, actions = [], [], []
   while current_time - start_time < FLAGS.max_time_secs:
-    print('work')
     #time.sleep(0.0008) #on some fast computer, works better with sleep on real A1?
     start_time_robot = current_time
     start_time_wall = time.time()
@@ -524,6 +546,16 @@ def main(argv):
       if actual_duration < expected_duration:
         time.sleep(expected_duration - actual_duration)
     #print("actual_duration=", actual_duration)
+
+  print("X Slope:", position_profile_slope_x)
+  print("Y Slope:", position_profile_slope_y)
+  print("Z Slope:", position_profile_slope_z)
+
+  df = pd.DataFrame(cumulative_foot_forces)
+  df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
+  plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
+  # plt.show()
+
   if FLAGS.use_gamepad:
     gamepad.stop()
 
@@ -533,11 +565,6 @@ def main(argv):
              com_vels=com_vels,
              imu_rates=imu_rates)
     logging.info("logged to: {}".format(logdir))
-
-  df = pd.DataFrame(cumulative_foot_forces)
-  df.plot(x='current_time', y=['5', '10', '15', '20'], kind='line')
-  plt.savefig("foot_force_plots/" + str(datetime.datetime.utcnow()) + "_foot_forces_plot.png")
-  # plt.show()
 
 
 if __name__ == "__main__":
