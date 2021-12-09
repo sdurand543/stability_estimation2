@@ -82,8 +82,8 @@ _DUTY_FACTOR = [1] * 4
 _INIT_PHASE_FULL_CYCLE = [0, 0, 0, 0]
 
 _INIT_LEG_STATE = (
-    gait_generator_lib.LegState.SWING,
     gait_generator_lib.LegState.STANCE,
+    gait_generator_lib.LegState.SWING,
     gait_generator_lib.LegState.STANCE,
     gait_generator_lib.LegState.STANCE,
 )
@@ -120,10 +120,10 @@ def _setup_three_leg_controller(robot):
       initial_leg_state=_INIT_LEG_STATE,
       lift_time = 0.5)
 
+    window_size = 20 if not FLAGS.use_real_robot else 1
+    
     state_estimator = com_velocity_estimator.COMVelocityEstimator(
       robot, window_size=window_size)
-    
-    window_size = 20 if not FLAGS.use_real_robot else 1
 
     controller = balanced_stance_leg_controller.BalancedStanceLegController(
       robot,
@@ -253,7 +253,6 @@ def main(argv):
 
   controller = _setup_three_leg_controller(robot)
 
-  controller.reset()
   if FLAGS.use_gamepad:
     gamepad = gamepad_reader.Gamepad()
     command_function = gamepad.get_command
@@ -265,195 +264,89 @@ def main(argv):
                           datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
     os.makedirs(logdir)
 
-  start_time = robot.GetTimeSinceReset()
+
+  start_time = robot.GetTimeSinceReset()  
   current_time = start_time
+  controller.reset(current_time)
+
   com_vels, imu_rates, actions = [], [], []
   
-  action_start = robot.GetMotorAngles()
-  action_initial = np.array([0., 0.9, -2 * 0.9] * 4)  # intial height set by low-level controller - ~0.24m
-  #action_final = np.array([0., 1., -2*1.] + [0., 0.9, -2 * 0.9] * 3)
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + [0.3, 0.9, -2 * 0.9] + [0.3, 0.6, -2 * 0.9] + [0.3, 0.6, -2 * 0.9])
-
   cumulative_foot_forces = []
   timesteps = 0
-
-  num_steps_to_reset = 5000
-  for cur_step_ in range(num_steps_to_reset):
-      balance_action = controller.get_action()
-      action = action_initial * (
-        num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
-
-      time_dict = {'current_time': timesteps}
+  
+  def actuate_foot2_joint_angles(foot_joint_angles_end, duration, testing=False):
+    nonlocal robot
+    nonlocal timesteps
+    joint_angles_start = robot.GetMotorAngles()
+    foot_joint_angles_start = joint_angles_start[3:6]
+    for curr_step in range(duration):
+      print("Time", timesteps)
+      print("foot_joint_angles_end", foot_joint_angles_end)
+      print("joint_angles_start", joint_angles_start)
+      foot_joint_angles_curr = np.array(foot_joint_angles_start) * (duration - curr_step) / duration + np.array(foot_joint_angles_end) * curr_step / duration
+      print("foot_joint_angles_curr", foot_joint_angles_curr)
+      controller_action = controller.get_action()[0]
+      joint_angles_curr = np.array([])
+      print("Controller Action (should be 0):", controller_action)
+      for joint_id in range(12):
+        if joint_id in controller_action:
+          joint_angles_curr = np.append(joint_angles_curr, controller_action.get(joint_id))
+        else:
+          joint_angles_curr = np.append(joint_angles_curr, foot_joint_angles_curr[joint_id-(1*3)])
+          
+      print("Joint angles curr", joint_angles_curr)
+      robot.Step(joint_angles_curr, robot_config.MotorControlMode.POSITION)
       foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
-
-      time.sleep(robot.time_step)
-
-  num_steps_to_reset = 5000
-
-  action_initial = np.copy(action_final) #= np.array([-0.15, 0.9, -2 * 0.9] + [0.15, 0.9, -2 * 0.9] + [-0.15, 0.7, -2 * 0.9] + [0.15, 0.7, -2 * 0.9])#np.array([0., 1.2, -2 * 1.2] + [0.15, 0.9, -2 * 0.9] + [0.0, 1, -2 * 0.9] + [0.15, 1, -2 * 0.9])
-  desired_foot_position = [0.181,0.15,-0.03]
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
-
       time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
       df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
-
-      time.sleep(robot.time_step)
-
-  num_steps_to_reset = 10000
-
-  action_initial = np.copy(action_final)
-  desired_foot_position = [0.35,0.15,0]
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
-
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
-
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
       print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
       df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
+      cumulative_foot_forces.append(time_dict)
       timesteps += 1
-      controller.update()
-
-      time.sleep(robot.time_step)
-
-  num_steps_to_reset = 10000
-
-  action_initial = np.copy(action_final)
-  desired_foot_position = [0.35,0.15,-0.3]
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
-
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
-
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
-
-      trigger_foot_force = foot_forces['10']
-      if trigger_foot_force > 15:
-          action_initial = robot.GetMotorAngles()
-          action_initial = action
+      if (testing):
+        trigger_foot_force = foot_forces['10']
+        if trigger_foot_force > 15:
+          joint_angles_start = robot.GetMotorAngles()
+          joint_angles_start = action
           print('contact')
-          controller.update()
-          break
-
+          controller.update(timesteps)
+          return joint_angles_curr, {contact:True}
+      controller.update(0)
+      #print("Examples File Motor Angles", robot.GetMotorAngles())
       time.sleep(robot.time_step)
+    return foot_joint_angles_end, {contact:False}
+  
+  def actuate_foot2_position(desired_foot_position_end, duration, testing=False):
+    print(desired_foot_position_end)
+    desired_foot_joint_angles_end = robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position_end)[1]
+    print(robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position_end))
 
-  num_steps_to_reset = 1000
-
-  desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
-  desired_foot_position[2] = desired_foot_position[2] + 0.1
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
-
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
-
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
-
-      time.sleep(robot.time_step)
-
-  num_steps_to_reset = 5000
-
-  action_initial = action_final
-  desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
-  desired_foot_position[0] = desired_foot_position[0] - 0.23
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
-
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
-
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
-
-      time.sleep(robot.time_step)
-
-  num_steps_to_reset = 2000
-  action_initial = np.copy(action_final)
-  action_final = action_start
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-                  num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
-
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
-
-      time.sleep(robot.time_step)
-
-  num_steps_to_reset = 5000
+    print(desired_foot_joint_angles_end)
+    return actuate_foot2_joint_angles(desired_foot_joint_angles_end, duration, testing)
 
 
-  num_steps_to_reset = 1000
+    
+  ACTION_INITIAL = np.array([0, 0.9, -1.8] * 4)
+  robot.Step(robot.GetMotorAngles(), robot_config.MotorControlMode.POSITION)
 
-  action_initial = np.copy(action_final)
+  print("THIS IS MOTOR ANGLES", robot.GetMotorAngles())
+  time.sleep(5)
+  for i in range(1000):
+    robot.Step(robot.GetMotorAngles(), robot_config.MotorControlMode.POSITION)
+    time.sleep(robot.time_step)
+  print("SOL: ", robot.ComputeMotorAnglesFromFootLocalPosition(1, [0.3, 0.9, -2 * 0.9])[1])
+  exit()
 
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
-
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
-
-      time.sleep(robot.time_step)
+  #curr_joint_angles = robot.GetMotorAngles()
+  #curr_joint_angles = actuate_foot2_position(robot.GetFootPositionsInBaseFrame()[1], 5000)
+  curr_joint_angles = actuate_foot2_position([0.3, 0.9, -2 * 0.9], 5000)
+  #curr_joint_angles = actuate_foot2_position(curr_joint_angles, [0.181, 0.15, -0.03], 5000)
+  #curr_joint_angles = actuate_foot2_position(curr_joint_angles, [0.35, 0.15, 0.0], 10000)
+  #curr_joint_angles = actuate_foot2_position(curr_joint_angles, [0.35, 0.15, -0.3], 10000, detection=True)
+  #curr_joint_angles = actuate_foot2_position(curr_joint_angles, robot.GetFootPositionsInBaseFrame()[1], 10000)
+  #curr_joint_angles = actuate_foot2_position(curr_joint_angles, robot.GetFootPositionsInBaseFrame()[1] + 0.1, 10000)
+  #curr_joint_angles = actuate_foot2_position(curr_joint_angles, robot.GetFootPositionsInBaseFrame()[1] - 0.23, 5000)
+  #curr_joint_angles = actuate_foot2_position(curr_joint_angles, robot.GetFootPositionsInBaseFrame()[1], 3000)
 
   global _DUTY_FACTOR
   global _INIT_PHASE_FULL_CYCLE
@@ -467,7 +360,10 @@ def main(argv):
       gait_generator_lib.LegState.SWING
     )
   controller = _setup_gait_controller(robot)
-  controller.reset()
+
+  start_time = robot.GetTimeSinceReset()
+  current_time = start_time
+  controller.reset(current_time)
   controller.update()
 
   if FLAGS.use_gamepad:
@@ -481,8 +377,6 @@ def main(argv):
                           datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
     os.makedirs(logdir)
 
-  start_time = robot.GetTimeSinceReset()
-  current_time = start_time
   com_vels, imu_rates, actions = [], [], []
   while current_time - start_time < FLAGS.max_time_secs:
     print('work')

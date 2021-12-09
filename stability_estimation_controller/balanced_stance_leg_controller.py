@@ -179,6 +179,7 @@ class BalancedStanceLegController(leg_controller.LegController):
         self._joint_angles[joint_id] = (joint_angle, leg_id)
 
     action = {}
+
     kps = self._robot.GetMotorPositionGains()
     kds = self._robot.GetMotorVelocityGains()
     for joint_id, joint_angle_leg_id in self._joint_angles.items():
@@ -188,6 +189,9 @@ class BalancedStanceLegController(leg_controller.LegController):
         # This is a hybrid action for PD control.
         action[joint_id] = (joint_angle_leg_id[0], kps[joint_id], 0,
                             kds[joint_id], 0)
+        #print("joint_id: ", joint_id)
+        #print(self._robot.GetMotorAngles()[joint_id])
+        action[joint_id] = self._robot.GetMotorAngles()[joint_id]
+        action[joint_id] = 0
 
-    print("action:", action)
     return action, None
