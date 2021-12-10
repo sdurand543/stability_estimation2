@@ -300,7 +300,7 @@ def main(argv):
 
   action_initial = np.copy(action_final) #= np.array([-0.15, 0.9, -2 * 0.9] + [0.15, 0.9, -2 * 0.9] + [-0.15, 0.7, -2 * 0.9] + [0.15, 0.7, -2 * 0.9])#np.array([0., 1.2, -2 * 1.2] + [0.15, 0.9, -2 * 0.9] + [0.0, 1, -2 * 0.9] + [0.15, 1, -2 * 0.9])
   desired_foot_position = [0.181,0.15,-0.03]
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.6, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
   for cur_step_ in range(num_steps_to_reset):
       action = action_initial * (
               num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
@@ -316,27 +316,30 @@ def main(argv):
 
       time.sleep(robot.time_step)
 
-  # num_steps_to_reset = 5000
+  num_steps_to_reset = 5000
 
-  # action_initial = np.copy(action_final)
-  # desired_foot_position = [0.35,0.15,0]
-  # action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  action_initial = np.copy(action_final)
+  current_foot_position = robot.GetFootPositionsInBaseFrame()[1]
+  desired_foot_position[0] += 0.15
+  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.6, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
 
-  # for cur_step_ in range(num_steps_to_reset):
-  #     action = action_initial * (
-  #             num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-  #     robot.Step(action, robot_config.MotorControlMode.POSITION)
+  for cur_step_ in range(num_steps_to_reset):
+      action = action_initial * (
+              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+      robot.Step(action, robot_config.MotorControlMode.POSITION)
 
-  #     time_dict = {'current_time': timesteps}
-  #     foot_forces = robot.GetFootForce()
-  #     print("Foot Forces:", foot_forces)
-  #     df_dict = dict(time_dict)
-  #     df_dict.update(foot_forces)
-  #     cumulative_foot_forces.append(df_dict)
-  #     timesteps += 1
-  #     controller.update()
+      time_dict = {'current_time': timesteps}
+      foot_forces = robot.GetFootForce()
+      print("Foot Forces:", foot_forces)
+      df_dict = dict(time_dict)
+      df_dict.update(foot_forces)
+      cumulative_foot_forces.append(df_dict)
+      timesteps += 1
+      controller.update()
 
-  #     time.sleep(robot.time_step)
+      time.sleep(robot.time_step)
+
+  exit()
 
   # num_steps_to_reset = 5000
 
@@ -457,7 +460,7 @@ def main(argv):
   action_initial = action_final
   desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
   desired_foot_position[2] = desired_foot_position[2] - 0.1 #desired_foot_position[0] = desired_foot_position[0] - 0.23
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.6, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
 
   for cur_step_ in range(num_steps_to_reset):
       action = action_initial * (
