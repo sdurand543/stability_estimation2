@@ -29,9 +29,9 @@ except:  #pylint: disable=W0702
   print("or use pip3 install motion_imitation --user")
   sys.exit()
 
-_KP = [np.array([0.05, 0.05, 0.1]), np.array([0.05, 0.05, 0.1]), np.array([0.05, 0.05, 0.1]), np.array([0.05, 0.05, 0.1])]
+_KP = [np.array([0.05, 0.05, 0.6]), np.array([0.05, 0.05, 0.6]), np.array([0.05, 0.05, 0.6]), np.array([0.05, 0.05, 0.6])]
 _KI = [np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0])]
-_KD = [np.array([0.00, 0.00, 0.0]), np.array([0.00, 0.00, 0.0]), np.array([0.00, 0.00, 0.0]), np.array([0.00, 0.00, 0.0])]
+_KD = [np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0])]
 
 class BalancedStanceLegController(leg_controller.LegController):
   """Controls the stance leg position using a PID controller and joint angle model prediction
@@ -128,21 +128,27 @@ class BalancedStanceLegController(leg_controller.LegController):
   def get_action(self) -> Mapping[Any, Any]:
 
     # Get all Foot Positions
+    foot_forces = self._robot.GetFootForce()
     hip_positions = self._robot.GetHipPositionsInBaseFrame()
     foot_positions = self._robot.GetFootPositionsInBaseFrame()
     
     # Get a List of STANCE Feet and Calculate Desired COM Positions
     desired_com_position_2d = np.array([0., 0.], dtype=np.float64)
     stance_legs = {} # Mapping[leg_id, (foot_position_bf, hip_offset_bf)]
+    total_force = 0
     for leg_id, leg_state in enumerate(self._gait_generator.leg_state):
       if leg_state is gait_generator_lib.LegState.STANCE:
+        print("STANCE for leg:", leg_id, leg_state)
         hip_offset = hip_positions[leg_id]
         foot_position_bf = foot_positions[leg_id]
         stance_legs[leg_id] = ( foot_position_bf, hip_offset )
-        desired_com_position_2d += foot_position_bf[0:2]
+        #total_force += foot_forces[str((leg_id + 1) * 5)]
+        desired_com_position_2d += foot_position_bf[0:2] #* foot_forces[str((leg_id + 1) * 5)]
     
     # Center of STANCE Leg Polygon
-    desired_com_position_2d = desired_com_position_2d / len(stance_legs)
+    desired_com_position_2d = desired_com_position_2d / len(stance_legs) #/ (total_force + 0.001)
+
+    desired_com_position_2d += np.array([0.0, 0.0])
 
     # Delegate Desired Motion
     desired_com_position = np.array([desired_com_position_2d[0],
@@ -157,28 +163,34 @@ class BalancedStanceLegController(leg_controller.LegController):
 
       # Taking into Account Hips (Getting Minimum Breadth)
 
-      min_hips = 1.0
-      max_hips = 1.3
-      if leg_id == 0: # front left
-        boxed_foot_position[0] = min(min_hips * hip_offset[0], foot_position[0])
-        boxed_foot_position[1] = min(min_hips * hip_offset[1], foot_position[1])
-        boxed_foot_position[0] = max(max_hips * hip_offset[0], foot_position[0])
-        boxed_foot_position[1] = max(max_hips * hip_offset[1], foot_position[1])
-      if leg_id == 1: # front right
-        boxed_foot_position[0] = min(min_hips * hip_offset[0], foot_position[0])
-        boxed_foot_position[1] = max(min_hips * hip_offset[1], foot_position[1])
-        boxed_foot_position[0] = max(max_hips * hip_offset[0], foot_position[0])
-        boxed_foot_position[1] = min(max_hips * hip_offset[1], foot_position[1])
-      if leg_id == 2: # back left
+      '''
+      min_hips = 0.5
+      max_hips = 3
+      if leg_id == 0: # front right
         boxed_foot_position[0] = max(min_hips * hip_offset[0], foot_position[0])
         boxed_foot_position[1] = min(min_hips * hip_offset[1], foot_position[1])
         boxed_foot_position[0] = min(max_hips * hip_offset[0], foot_position[0])
         boxed_foot_position[1] = max(max_hips * hip_offset[1], foot_position[1])
-      if leg_id == 3: # back right
+      if leg_id == 1: # front left
         boxed_foot_position[0] = max(min_hips * hip_offset[0], foot_position[0])
         boxed_foot_position[1] = max(min_hips * hip_offset[1], foot_position[1])
         boxed_foot_position[0] = min(max_hips * hip_offset[0], foot_position[0])
         boxed_foot_position[1] = min(max_hips * hip_offset[1], foot_position[1])
+      if leg_id == 2: # back right
+        boxed_foot_position[0] = min(min_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = min(min_hips * hip_offset[1], foot_position[1])
+        boxed_foot_position[0] = max(max_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = max(max_hips * hip_offset[1], foot_position[1])
+      if leg_id == 3: # back left
+        boxed_foot_position[0] = min(min_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = max(min_hips * hip_offset[1], foot_position[1])
+        boxed_foot_position[0] = max(max_hips * hip_offset[0], foot_position[0])
+        boxed_foot_position[1] = min(max_hips * hip_offset[1], foot_position[1])
+      '''
+
+
+      print("Desired Center of Mass", "Leg:", leg_id, "COM:", desired_com_position)
+      print("Position of for leg", "Leg:", leg_id, "Position:", foot_position)
 
       
       desired_foot_position_2d = boxed_foot_position[0:2] - desired_com_position_2d
@@ -187,12 +199,16 @@ class BalancedStanceLegController(leg_controller.LegController):
          -self._desired_height],
         dtype=np.float64)
       
+      print("Desired Position for leg", "Leg:", leg_id, "Desired Position:", desired_foot_position)
+
       # Update PID State
       alpha = 0.3
       error = desired_foot_position - foot_position
       self.error_integral[leg_id] = alpha * self.error_integral[leg_id] + error
       error_derivative = error - self.error_prev[leg_id]
       self.error_prev[leg_id] = error
+
+      print("Error for leg", "Leg:", leg_id, "Error:", error)
       
       # Get Input Actuation
       u = (_KP[leg_id] * error
@@ -200,8 +216,11 @@ class BalancedStanceLegController(leg_controller.LegController):
            + _KD[leg_id] * error_derivative)
       
       # Get Total Position
-      target_foot_position = foot_position + u
-      
+      target_foot_position = foot_position - u
+
+      print("Target foot position for leg", "Leg:", leg_id, "Target Foot Pos:", target_foot_position)
+
+
       # IK Solution to Target Position
       joint_ids, joint_angles = (
         self._robot.ComputeMotorAnglesFromFootLocalPosition(
@@ -222,5 +241,5 @@ class BalancedStanceLegController(leg_controller.LegController):
         # This is a hybrid action for PD control.
         action[joint_id] = (joint_angle_leg_id[0], kps[joint_id], 0,
                             kds[joint_id], 0)
-
+    #exit()
     return action, None
