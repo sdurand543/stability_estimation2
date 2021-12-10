@@ -45,7 +45,7 @@ flags.DEFINE_bool("use_gamepad", False,
 flags.DEFINE_bool("use_real_robot", False,
                   "whether to use real robot or simulation")
 flags.DEFINE_bool("show_gui", True, "whether to show GUI.")
-flags.DEFINE_float("max_time_secs", 30., "maximum time to run the robot.")
+flags.DEFINE_float("max_time_secs", 10., "maximum time to run the robot.")
 FLAGS = flags.FLAGS
 
 _NUM_SIMULATION_ITERATION_STEPS = 300
@@ -317,168 +317,168 @@ def main(argv):
       controller.update()
 
       time.sleep(robot.time_step)
+  BREAK = FALSE
+  # num_steps_to_reset = 5000
 
-  num_steps_to_reset = 5000
+  # action_initial = np.copy(action_final)
+  # desired_foot_position = [0.35,0.15,0]
+  # action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
 
-  action_initial = np.copy(action_final)
-  desired_foot_position = [0.35,0.15,0]
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  # for cur_step_ in range(num_steps_to_reset):
+  #     action = action_initial * (
+  #             num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+  #     robot.Step(action, robot_config.MotorControlMode.POSITION)
 
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
+  #     time_dict = {'current_time': timesteps}
+  #     foot_forces = robot.GetFootForce()
+  #     print("Foot Forces:", foot_forces)
+  #     df_dict = dict(time_dict)
+  #     df_dict.update(foot_forces)
+  #     cumulative_foot_forces.append(df_dict)
+  #     timesteps += 1
+  #     controller.update()
 
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
+  #     time.sleep(robot.time_step)
 
-      time.sleep(robot.time_step)
+  # num_steps_to_reset = 5000
 
-  num_steps_to_reset = 5000
+  # action_initial = np.copy(action_final)
+  # desired_foot_position = [0.35,0.15,-0.3]
+  # action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
 
-  action_initial = np.copy(action_final)
-  desired_foot_position = [0.35,0.15,-0.3]
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  # timesteps_reg = []
+  # position_profile_x = []
+  # position_profile_y = []
+  # position_profile_z = []
+  # data_collection = False
+  # FOOT_SENSOR_NOISE_THRESHOLD = 0
+  # DATA_COLLECTION_STOP_THRESHOLD = 15
+  # MAX_FORCE = 0
+  # STABLE_FACTOR = 0.3
+  # BREAK = False
+  # START_HEIGHT = 0
+  # SKIP_TEN = 0
+  # STABLE = False
+  # position_profile_slope_x = 0
+  # position_profile_slope_y = 0
+  # position_profile_slope_z = 0
 
-  timesteps_reg = []
-  position_profile_x = []
-  position_profile_y = []
-  position_profile_z = []
-  data_collection = False
-  FOOT_SENSOR_NOISE_THRESHOLD = 0
-  DATA_COLLECTION_STOP_THRESHOLD = 15
-  MAX_FORCE = 0
-  STABLE_FACTOR = 0.3
-  BREAK = False
-  START_HEIGHT = 0
-  SKIP_TEN = 0
-  STABLE = False
-  position_profile_slope_x = 0
-  position_profile_slope_y = 0
-  position_profile_slope_z = 0
+  # for cur_step_ in range(num_steps_to_reset):
+  #     action = action_initial * (
+  #             num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+  #     robot.Step(action, robot_config.MotorControlMode.POSITION)
 
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
+  #     time_dict = {'current_time': timesteps}
+  #     foot_forces = robot.GetFootForce()
+  #     print("Foot Forces:", foot_forces)
+  #     df_dict = dict(time_dict)
+  #     df_dict.update(foot_forces)
+  #     cumulative_foot_forces.append(df_dict)
+  #     timesteps += 1
+  #     controller.update()
+  #     trigger_foot_force = foot_forces['10']
+  #     if trigger_foot_force > FOOT_SENSOR_NOISE_THRESHOLD and not data_collection:
+  #       data_collection = True
+  #       data_collection_start_time = time.time()
+  #       data_collection_end_time = time.time()
+  #       print(SKIP_TEN)
+  #       SKIP_TEN = cur_step_ + 10
 
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
-      trigger_foot_force = foot_forces['10']
-      if trigger_foot_force > FOOT_SENSOR_NOISE_THRESHOLD and not data_collection:
-        data_collection = True
-        data_collection_start_time = time.time()
-        data_collection_end_time = time.time()
-        print(SKIP_TEN)
-        SKIP_TEN = cur_step_ + 10
+  #     if trigger_foot_force > MAX_FORCE and cur_step_ > SKIP_TEN:
+  #       MAX_FORCE = trigger_foot_force
 
-      if trigger_foot_force > MAX_FORCE and cur_step_ > SKIP_TEN:
-        MAX_FORCE = trigger_foot_force
+  #     if data_collection and trigger_foot_force <= DATA_COLLECTION_STOP_THRESHOLD:
+  #       current_timestep = time.time() - data_collection_start_time
+  #       timesteps_reg.append(current_timestep)
+  #       current_foot_position = robot.GetFootPositionsInBaseFrame()[1]
+  #       position_profile_x.append(current_foot_position[0])
+  #       position_profile_y.append(current_foot_position[1])
+  #       position_profile_z.append(current_foot_position[2])
 
-      if data_collection and trigger_foot_force <= DATA_COLLECTION_STOP_THRESHOLD:
-        current_timestep = time.time() - data_collection_start_time
-        timesteps_reg.append(current_timestep)
-        current_foot_position = robot.GetFootPositionsInBaseFrame()[1]
-        position_profile_x.append(current_foot_position[0])
-        position_profile_y.append(current_foot_position[1])
-        position_profile_z.append(current_foot_position[2])
+  #     if trigger_foot_force > DATA_COLLECTION_STOP_THRESHOLD - 5:
+  #       if STABLE:
+  #         pass
+  #       else:
+  #         p.resetBasePositionAndOrientation(block2, [1.28,0.6,-0.08],[0.0,0.0,0.0,1])
+  #     if data_collection and trigger_foot_force < MAX_FORCE*STABLE_FACTOR:
+  #       data_collection = False
+  #       data_collection_end_time = timesteps
 
-      if trigger_foot_force > DATA_COLLECTION_STOP_THRESHOLD - 5:
-        if STABLE:
-          pass
-        else:
-          p.resetBasePositionAndOrientation(block2, [1.28,0.6,-0.08],[0.0,0.0,0.0,1])
-      if data_collection and trigger_foot_force < MAX_FORCE*STABLE_FACTOR:
-        data_collection = False
-        data_collection_end_time = timesteps
+  #       slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_x)
+  #       position_profile_slope_x = slope
+  #       slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_y)
+  #       position_profile_slope_y = slope
+  #       slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_z)
+  #       position_profile_slope_z = slope
 
-        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_x)
-        position_profile_slope_x = slope
-        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_y)
-        position_profile_slope_y = slope
-        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_z)
-        position_profile_slope_z = slope
+  #       action_initial = robot.GetMotorAngles()
+  #       action_initial = action
+  #       BREAK = True
+  #       print('Break')
+  #       controller.update()
+  #       break
 
-        action_initial = robot.GetMotorAngles()
-        action_initial = action
-        BREAK = True
-        print('Break')
-        controller.update()
-        break
+  #     if trigger_foot_force > DATA_COLLECTION_STOP_THRESHOLD:
+  #       data_collection = False
+  #       data_collection_end_time = timesteps
 
-      if trigger_foot_force > DATA_COLLECTION_STOP_THRESHOLD:
-        data_collection = False
-        data_collection_end_time = timesteps
+  #       slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_x)
+  #       position_profile_slope_x = slope
+  #       slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_y)
+  #       position_profile_slope_y = slope
+  #       slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_z)
+  #       position_profile_slope_z = slope
 
-        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_x)
-        position_profile_slope_x = slope
-        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_y)
-        position_profile_slope_y = slope
-        slope, intercept, r, p1, std_err = stats.linregress(timesteps_reg, position_profile_z)
-        position_profile_slope_z = slope
+  #       action_initial = robot.GetMotorAngles()
+  #       action_initial = action
 
-        action_initial = robot.GetMotorAngles()
-        action_initial = action
+  #       print('Max reached')
+  #       controller.update()
+  #       break
 
-        print('Max reached')
-        controller.update()
-        break
+  #     time.sleep(robot.time_step)
 
-      time.sleep(robot.time_step)
+  # num_steps_to_reset = 1000
+  # desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
+  # desired_foot_position[2] = desired_foot_position[2] + 0.1
+  # action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
 
-  num_steps_to_reset = 1000
-  desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
-  desired_foot_position[2] = desired_foot_position[2] + 0.1
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  # for cur_step_ in range(num_steps_to_reset):
+  #     action = action_initial * (
+  #             num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+  #     robot.Step(action, robot_config.MotorControlMode.POSITION)
 
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
+  #     time_dict = {'current_time': timesteps}
+  #     foot_forces = robot.GetFootForce()
+  #     print("Foot Forces:", foot_forces)
+  #     df_dict = dict(time_dict)
+  #     df_dict.update(foot_forces)
+  #     cumulative_foot_forces.append(df_dict)
+  #     timesteps += 1
+  #     controller.update()
 
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
+  #     time.sleep(robot.time_step)
+  # num_steps_to_reset = 5000
+  # action_initial = action_final
+  # desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
+  # desired_foot_position[0] = desired_foot_position[0] - 0.23
+  # action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
 
-      time.sleep(robot.time_step)
-  num_steps_to_reset = 5000
-  action_initial = action_final
-  desired_foot_position = robot.GetFootPositionsInBaseFrame()[1]
-  desired_foot_position[0] = desired_foot_position[0] - 0.23
-  action_final = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
+  # for cur_step_ in range(num_steps_to_reset):
+  #     action = action_initial * (
+  #             num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
+  #     robot.Step(action, robot_config.MotorControlMode.POSITION)
 
-  for cur_step_ in range(num_steps_to_reset):
-      action = action_initial * (
-              num_steps_to_reset - cur_step_) / num_steps_to_reset + action_final * cur_step_ / num_steps_to_reset
-      robot.Step(action, robot_config.MotorControlMode.POSITION)
+  #     time_dict = {'current_time': timesteps}
+  #     foot_forces = robot.GetFootForce()
+  #     print("Foot Forces:", foot_forces)
+  #     df_dict = dict(time_dict)
+  #     df_dict.update(foot_forces)
+  #     cumulative_foot_forces.append(df_dict)
+  #     timesteps += 1
+  #     controller.update()
 
-      time_dict = {'current_time': timesteps}
-      foot_forces = robot.GetFootForce()
-      print("Foot Forces:", foot_forces)
-      df_dict = dict(time_dict)
-      df_dict.update(foot_forces)
-      cumulative_foot_forces.append(df_dict)
-      timesteps += 1
-      controller.update()
-
-      time.sleep(robot.time_step)
+  #     time.sleep(robot.time_step)
 
   num_steps_to_reset = 1000
   action_initial = np.copy(action_final)
