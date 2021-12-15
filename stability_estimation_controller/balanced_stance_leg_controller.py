@@ -29,10 +29,16 @@ except:  #pylint: disable=W0702
   print("or use pip3 install motion_imitation --user")
   sys.exit()
 
-_RELATIVE_KP = [np.array([0.1, 0.2, 0.022]), np.array([0.1, 0.2, 0.022]), np.array([0.1, 0.2, 0.022]), np.array([0.1, 0.2, 0.022])]
-_RELATIVE_KI = [np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05])]
-_RELATIVE_KD = [np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05])]
 
+# PID FOR WEIGHT DISTRIBUTION
+_KZ = 1
+
+# todo, decrease x
+_RELATIVE_KP = [np.array([0.02, 0.02, 0.1]), np.array([0.02, 0.02, 0.1]), np.array([0.02, 0.02, 0.1]), np.array([0.02, 0.02, 0.1])]
+_RELATIVE_KI = [np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01])]
+_RELATIVE_KD = [np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01])]
+
+# PID FOR RETAINING POSE
 _ABSOLUTE_KP = [np.array([0.13, 0.1, 0.8]), np.array([0.13, 0.1, 0.8]), np.array([0.13, 0.1, 0.8]), np.array([0.13, 0.1, 0.8])]
 _ABSOLUTE_KI = [np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05])]
 _ABSOLUTE_KD = [np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05]), np.array([0.05, 0.05, 0.05])]
@@ -137,29 +143,42 @@ class BalancedStanceLegController(leg_controller.LegController):
 
   def get_action(self) -> Mapping[Any, Any]:
 
+    # ESTIMATED WEIGHTS
+    body_mass = 7
+    leg_mass = 10
+    total_mass = body_mass + 4 * leg_mass
+    
     # Get all Foot Positions
-    foot_forces = self._robot.GetFootForce()
     hip_positions = self._robot.GetHipPositionsInBaseFrame()
     foot_positions = self._robot.GetFootPositionsInBaseFrame()
 
     # Get a List of STANCE Feet and Calculate Desired COM Position
+    com_position_2d = np.array([0., 0.], dtype=np.float64) # this is also 'the position of the robot weighted by body_mass'
     desired_com_position_2d = np.array([0., 0.], dtype=np.float64)
     stance_legs = {} # Mapping[leg_id, (foot_position_bf, hip_offset_bf)]
-    total_force = 0
     for leg_id, leg_state in enumerate(self._gait_generator.leg_state):
+      foot_position_bf = foot_positions[leg_id]
+      hip_offset = hip_positions[leg_id]
+      com_position_2d += foot_position_bf[0:2] * leg_mass
       if leg_state is gait_generator_lib.LegState.STANCE:
-        hip_offset = hip_positions[leg_id]
-        foot_position_bf = foot_positions[leg_id]
         stance_legs[leg_id] = ( foot_position_bf, hip_offset )
         desired_com_position_2d += foot_position_bf[0:2]
 
+    com_position_2d /= total_mass
+    #com_position_2d = np.array([0, 0], dtype=np.float64)
     desired_com_position_2d /= len(stance_legs)
 
     # For Each Leg
     for leg_id, foot_info in stance_legs.items():
       foot_position = foot_info[0]
       hip_offset = foot_info[1]
-      relative_error = np.array([-desired_com_position_2d[0], -desired_com_position_2d[1], 0])
+
+      #EXPERIMENTAL
+      exp_err = com_position_2d
+      print("COM", com_position_2d)
+      
+      relative_error_2d = com_position_2d - desired_com_position_2d
+      relative_error = np.array([relative_error_2d[0], relative_error_2d[1], _KZ * np.dot(exp_err, foot_position[0:2])])
       absolute_error = self._initial_foot_positions[leg_id] - foot_position
       
       # Run PID on the Error
@@ -180,6 +199,7 @@ class BalancedStanceLegController(leg_controller.LegController):
            + _ABSOLUTE_KP[leg_id] * absolute_error
            + _ABSOLUTE_KI[leg_id] * self.absolute_error_integral[leg_id]
            + _ABSOLUTE_KD[leg_id] * absolute_error_derivative)
+
 
       print("U:", u)
 

@@ -253,13 +253,17 @@ def main(argv):
       controller.update(0)
       
       time.sleep(robot.time_step)
-    return joint_angles_curr, False
+    return joint_angles_curr
 
 
   joint_angles_start = np.array([0., 0.9, -2 * 0.9] * 4)  # intial height set by low-level controller - ~0.24m
   joint_angles_curr = np.array([0., 0.9, -2 * 0.9] * 4)  # intial height set by low-level controller - ~0.24m
   joint_angles_end = np.array([0.3, 0.9, -2 * 0.9] + [0.3, 0.9, -2 * 0.9] + [0.3, 0.6, -2 * 0.9] + [0.3, 0.6, -2 * 0.9])
 
+
+  joint_angles_curr = actuate_joint_angles(joint_angles_curr, joint_angles_end, 50)  
+
+  '''
   num_steps = 50
   for curr_step in range(num_steps):
     joint_angles_probe = joint_angles_start * (num_steps - curr_step) / num_steps + joint_angles_end * curr_step / num_steps
@@ -279,16 +283,17 @@ def main(argv):
     joint_angles_curr = joint_angles_probe
 
   joint_angles_end = joint_angles_probe
+  '''
 
   desired_foot_position = [0.181,0.15,-0.03]
   joint_angles_curr = np.copy(joint_angles_end)
   joint_angles_end = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
-  joint_angles_curr, contact = actuate_joint_angles(joint_angles_curr, joint_angles_end, 300)
+  joint_angles_curr = actuate_joint_angles(joint_angles_curr, joint_angles_end, 300)
 
   desired_foot_position = [0.35,0.15,0]
   joint_angles_curr = np.copy(joint_angles_end)
   joint_angles_end = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
-  joint_angles_curr, contact = actuate_joint_angles(joint_angles_curr, joint_angles_end, 300)
+  joint_angles_curr = actuate_joint_angles(joint_angles_curr, joint_angles_end, 300)
   
   timesteps_reg = []
   position_profile_x = []
@@ -368,11 +373,11 @@ def main(argv):
   desired_foot_position = np.copy(robot.GetFootPositionsInBaseFrame()[1])
   desired_foot_position[2] = desired_foot_position[2] + 0.1
   joint_angles_end = np.array([0.3, 0.9, -2 * 0.9] + robot.ComputeMotorAnglesFromFootLocalPosition(1, desired_foot_position)[1] + [0.3, 0.65, -2 * 0.9] + [0.3, 0.65, -2 * 0.9])
-  joint_angles_curr, contact = actuate_joint_angles(joint_angles_curr, joint_angles_end, 50)
+  joint_angles_curr = actuate_joint_angles(joint_angles_curr, joint_angles_end, 50)
 
   joint_angles_curr = np.copy(joint_angles_end)
   joint_angles_end = np.copy(START_JOINT_ANGLES)
-  joint_angles_curr, contact = actuate_joint_angles(joint_angles_curr, joint_angles_end, 50)
+  joint_angles_curr = actuate_joint_angles(joint_angles_curr, joint_angles_end, 50)
 
   global _DUTY_FACTOR
   global _INIT_PHASE_FULL_CYCLE
