@@ -34,6 +34,8 @@ from mpc_controller import openloop_gait_generator
 from mpc_controller import raibert_swing_leg_controller
 from mpc_controller import torque_stance_leg_controller_quadprog as torque_stance_leg_controller
 
+from stability_estimation_controller import balanced_stance_leg_controller
+
 
 from motion_imitation.robots import a1
 from motion_imitation.robots import robot_config
@@ -142,6 +144,14 @@ def _setup_three_leg_controller(robot):
         # ,qp_solver = mpc_osqp.QPOASES #or mpc_osqp.OSQP
     )
 
+    st_controller = balanced_stance_leg_controller.BalancedStanceLegController(
+        robot,
+        gait_generator,
+        state_estimator,
+        desired_speed=desired_speed,      
+        desired_height=robot.MPC_BODY_HEIGHT
+    )
+    
     controller = locomotion_controller.LocomotionController(
         robot=robot,
         gait_generator=gait_generator,
@@ -149,6 +159,7 @@ def _setup_three_leg_controller(robot):
         swing_leg_controller=sw_controller,
         stance_leg_controller=st_controller,
         clock=robot.GetTimeSinceReset)
+
     return controller
 
 
