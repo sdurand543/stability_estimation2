@@ -33,16 +33,14 @@ except:  #pylint: disable=W0702
 # PID FOR WEIGHT DISTRIBUTION
 _KZ = 3
 
-_RELATIVE_KP = [np.array([0.075, 0.25, 0.3]), np.array([0.075, 0.25, 0.3]), np.array([0.075, 0.25, 0.3]), np.array([0.075, 0.25, 0.3])]
-_RELATIVE_KI = [np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01])]
+_RELATIVE_KP = [np.array([0.02, 0.25, 0.3]), np.array([0.02, 0.25, 0.3]), np.array([0.02, 0.25, 0.3]), np.array([0.02, 0.25, 0.3])]
+_RELATIVE_KI = [np.array([0.01, 0.05, 0.01]), np.array([0.01, 0.05, 0.01]), np.array([0.01, 0.05, 0.01]), np.array([0.01, 0.05, 0.01])]
 _RELATIVE_KD = [np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01]), np.array([0.01, 0.01, 0.01])]
 
 # PID FOR RETAINING POSE
 _ABSOLUTE_KP = [np.array([0.05, 0.2, 0.7]), np.array([0.05, 0.2, 0.7]), np.array([0.05, 0.2, 0.7]), np.array([0.05, 0.2, 0.7])]
-_ABSOLUTE_KI = [np.array([0.05, 0.05, 0.3]), np.array([0.05, 0.05, 0.3]), np.array([0.05, 0.05, 0.3]), np.array([0.05, 0.05, 0.3])]
+_ABSOLUTE_KI = [np.array([0.05, 0.9, 0.3]), np.array([0.05, 0.9, 0.3]), np.array([0.05, 0.9, 0.3]), np.array([0.05, 0.9, 0.3])]
 _ABSOLUTE_KD = [np.array([0.05, 0.05, 0.2]), np.array([0.05, 0.05, 0.2]), np.array([0.05, 0.05, 0.2]), np.array([0.05, 0.05, 0.2])]
-
-
 
 
 class BalancedStanceLegController(leg_controller.LegController):
@@ -109,6 +107,7 @@ class BalancedStanceLegController(leg_controller.LegController):
     self._max_leg3_pos = self._initial_foot_positions[3] + np.array([max_dist_offset, -max_dist_offset, max_dist_offset])
 
     self._joint_angles = {}
+
     self.reset(0)
 
   def reset(self, current_time: float) -> None:
@@ -188,7 +187,7 @@ class BalancedStanceLegController(leg_controller.LegController):
       absolute_error_derivative = absolute_error - self.absolute_error_prev[leg_id]
       self.absolute_error_prev[leg_id] = absolute_error
 
-      print("Relative_Error for leg", "Leg:", leg_id, "Relative_Error:", relative_error)
+      #print("Relative_Error for leg", "Leg:", leg_id, "Relative_Error:", relative_error)
 
       u = (_RELATIVE_KP[leg_id] * relative_error
            + _RELATIVE_KI[leg_id] * self.relative_error_integral[leg_id]
@@ -198,7 +197,7 @@ class BalancedStanceLegController(leg_controller.LegController):
            + _ABSOLUTE_KD[leg_id] * absolute_error_derivative)
 
 
-      print("U:", u)
+      #print("U:", u)
 
       # Get the Next Position by Adding Error
       foot_position_next_3d = foot_position + u
